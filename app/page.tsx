@@ -1,0 +1,106 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal";
+type FormState = {
+  brand: string; pasaran: string; tanggal: string; headline: string;
+  nominal: string; angka: string; tema: string; warna: string;
+  rasio: string; gaya: string; jadwalLama: string; jadwalBaru: string;
+  catatan: string;
+};
+
+const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
+  { id: "kemenangan", label: "Postingan Kemenangan", icon: "★", hint: "Bukti kemenangan yang meyakinkan" },
+  { id: "syair", label: "Postingan Syair", icon: "✦", hint: "Syair premium penuh atmosfer" },
+  { id: "prediksi", label: "Postingan Prediksi", icon: "◎", hint: "Angka prediksi yang mudah dibaca" },
+  { id: "jadwal", label: "Perubahan Jadwal", icon: "◷", hint: "Pengumuman jadwal pasaran" },
+];
+
+const initial: FormState = {
+  brand: "TOGELUP", pasaran: "SINGAPORE TOTO", tanggal: "6 AGUSTUS 2026",
+  headline: "SELAMAT KEPADA PEMENANG", nominal: "Rp 51.000.000", angka: "8 7 4 2",
+  tema: "Phoenix royal bercahaya", warna: "Emerald green, aqua blue, cyan glow, gold accent",
+  rasio: "4:5 — 1080 × 1350 px", gaya: "Premium, cinematic, HD, glossy 3D",
+  jadwalLama: "23:30 WIB", jadwalBaru: "22:45 WIB", catatan: "Teks harus tajam, rapi, mudah dibaca, dan tidak terpotong.",
+};
+
+function Field({ label, value, onChange, placeholder, area = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean }) {
+  const props = { value, placeholder, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value) };
+  return <label className="field"><span>{label}</span>{area ? <textarea {...props} rows={3} /> : <input {...props} />}</label>;
+}
+
+export default function Home() {
+  const [kind, setKind] = useState<Kind>("kemenangan");
+  const [form, setForm] = useState<FormState>(initial);
+  const [copied, setCopied] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("prompt-history");
+    if (saved) setHistory(JSON.parse(saved));
+  }, []);
+
+  const update = (key: keyof FormState) => (value: string) => setForm((old) => ({ ...old, [key]: value }));
+
+  const prompt = useMemo(() => {
+    const common = `Buat desain poster ${form.rasio} untuk brand ${form.brand}. Gaya visual ${form.gaya}. Gunakan palet warna ${form.warna}. Komposisi profesional, detail sangat tajam, pencahayaan sinematik, kontras kuat, kualitas iklan premium, siap posting di media sosial.`;
+    const endings = `\n\nKetentuan: ${form.catatan} Logo ${form.brand} harus terlihat jelas dan eksklusif. Jangan menambah logo, watermark, atau nama brand lain.`;
+    if (kind === "kemenangan") return `${common}\n\nTema: postingan kemenangan terpercaya dan berkelas. Tampilkan headline besar “${form.headline}”, nama pasaran “${form.pasaran}”, tanggal “${form.tanggal}”, nominal kemenangan “${form.nominal}”, dan angka kemenangan “${form.angka}”. Tambahkan elemen confetti halus, cahaya kemenangan, tiket atau koin premium tanpa membuat desain terlalu ramai.${endings}`;
+    if (kind === "syair") return `${common}\n\nTema utama: ${form.tema}. Buat postingan syair misterius, elegan, dan berkelas untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Sediakan panel syair utama dengan ruang teks yang lega, ornamen tematik, serta judul “SYAIR ${form.pasaran}”. Nuansa magis tetapi teks tetap menjadi fokus.${endings}`;
+    if (kind === "prediksi") return `${common}\n\nBuat poster ANGKA PREDIKSI premium untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Angka utama “${form.angka}” harus sangat besar, jelas, berjajar rapi, memiliki efek 3D glossy dan glow lembut. Gunakan tema ${form.tema}. Tambahkan panel informasi yang bersih dan hierarchy visual yang kuat.${endings}`;
+    return `${common}\n\nBuat poster pengumuman “PERUBAHAN JADWAL PASARAN” untuk ${form.pasaran}, tanggal ${form.tanggal}. Tampilkan jadwal lama “${form.jadwalLama}” dengan penanda lama, panah perubahan yang jelas, lalu jadwal baru “${form.jadwalBaru}” sebagai fokus terbesar. Suasana resmi, informatif, mendesak tetapi tetap elegan.${endings}`;
+  }, [kind, form]);
+
+  const copyPrompt = async () => {
+    await navigator.clipboard.writeText(prompt);
+    setCopied(true); setTimeout(() => setCopied(false), 1600);
+  };
+  const savePrompt = () => {
+    const next = [prompt, ...history.filter((x) => x !== prompt)].slice(0, 8);
+    setHistory(next); localStorage.setItem("prompt-history", JSON.stringify(next));
+  };
+
+  return (
+    <main className="shell">
+      <aside className="sidebar">
+        <div className="brand"><div className="brandMark">PG</div><div><b>PROMPTGEN</b><span>Creative Dashboard</span></div></div>
+        <p className="navLabel">JENIS POSTINGAN</p>
+        <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
+        <div className="sideNote"><b>Tips hasil terbaik</b><p>Isi data selengkap mungkin. Gunakan angka, tanggal, warna, dan ukuran yang spesifik.</p></div>
+      </aside>
+
+      <section className="workspace">
+        <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><h1>Rancang prompt. <em>Lebih cepat.</em></h1><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
+
+        <div className="grid">
+          <section className="panel formPanel">
+            <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm(initial)}>Reset</button></div>
+            <div className="formGrid">
+              <Field label="Nama Brand" value={form.brand} onChange={update("brand")} />
+              <Field label="Nama Pasaran" value={form.pasaran} onChange={update("pasaran")} />
+              <Field label="Tanggal Posting" value={form.tanggal} onChange={update("tanggal")} />
+              {kind === "kemenangan" && <><Field label="Headline" value={form.headline} onChange={update("headline")} /><Field label="Nominal Kemenangan" value={form.nominal} onChange={update("nominal")} /><Field label="Angka Kemenangan" value={form.angka} onChange={update("angka")} /></>}
+              {kind === "prediksi" && <Field label="Angka Prediksi" value={form.angka} onChange={update("angka")} />}
+              {kind === "jadwal" && <><Field label="Jadwal Lama" value={form.jadwalLama} onChange={update("jadwalLama")} /><Field label="Jadwal Baru" value={form.jadwalBaru} onChange={update("jadwalBaru")} /></>}
+              {(kind === "syair" || kind === "prediksi") && <Field label="Tema Visual" value={form.tema} onChange={update("tema")} />}
+              <Field label="Palet Warna" value={form.warna} onChange={update("warna")} />
+              <Field label="Ukuran / Rasio" value={form.rasio} onChange={update("rasio")} />
+              <Field label="Gaya Desain" value={form.gaya} onChange={update("gaya")} />
+              <div className="wide"><Field label="Catatan Tambahan" value={form.catatan} onChange={update("catatan")} area /></div>
+            </div>
+          </section>
+
+          <section className="panel outputPanel">
+            <div className="panelHead"><div><span>02</span><h2>Prompt Siap Pakai</h2></div><span className="live">● LIVE</span></div>
+            <div className="promptBox"><div className="promptTop"><span>GENERATED PROMPT</span><span>{prompt.length} karakter</span></div><p>{prompt}</p></div>
+            <div className="actions"><button className="primary" onClick={copyPrompt}>{copied ? "✓ Berhasil Disalin" : "Salin Prompt"}</button><button className="secondary" onClick={savePrompt}>Simpan Riwayat</button></div>
+            <div className="quality"><span>✓</span><div><b>Prompt sudah dioptimalkan</b><small>Struktur, visual, teks, dan batasan sudah lengkap.</small></div></div>
+          </section>
+        </div>
+
+        {history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
+      </section>
+    </main>
+  );
+}
