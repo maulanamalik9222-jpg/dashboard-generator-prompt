@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import AuthGate from "./auth-gate";
 
 type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi";
 type FormState = {
@@ -171,7 +172,7 @@ export default function Home() {
   };
 
   return (
-    <main className="shell">
+    <AuthGate><main className="shell">
       <aside className="sidebar">
         <div className="brand"><div className="brandMark">PG</div><div><b>PROMPTGEN</b><span>Creative Dashboard</span></div></div>
         <p className="navLabel">JENIS POSTINGAN</p>
@@ -232,6 +233,6 @@ export default function Home() {
 
         {kind !== "validasi" && history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
       </section>
-    </main>
+    </main></AuthGate>
   );
 }
