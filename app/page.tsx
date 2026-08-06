@@ -108,23 +108,34 @@ export default function Home() {
     const original = originalName.toUpperCase().replace(/[^A-Z]/g, "");
     let matched = 0;
     const mismatchPositions: number[] = [];
-    for (let i = 0; i < original.length; i++) {
+    const comparisonTotal = Math.max(mask.length, original.length);
+    for (let i = 0; i < comparisonTotal; i++) {
       const maskChar = mask[i];
-      const isMatch = maskChar === "X" || maskChar === original[i];
+      const originalChar = original[i];
+      const isMatch = Boolean(maskChar && originalChar) && (maskChar === "X" || maskChar === originalChar);
       if (isMatch) matched++;
       else mismatchPositions.push(i + 1);
     }
     const sameLength = mask.length === original.length;
-    const valid = original.length > 0 && sameLength && matched === original.length;
+    const valid = comparisonTotal > 0 && sameLength && matched === comparisonTotal;
+    const lengthDifference = Math.abs(mask.length - original.length);
+    const shortageMessage = !sameLength
+      ? mask.length > original.length
+        ? `Nama Asli kurang ${lengthDifference} huruf.`
+        : `Nama Tersamarkan kurang ${lengthDifference} huruf.`
+      : "Jumlah huruf kedua nama sama.";
     return {
       mask,
       original,
       adjusted: originalName.trim().replace(/\s+/g, " ").toUpperCase(),
       matched,
-      total: original.length,
-      percentage: original.length ? Math.round((matched / original.length) * 100) : 0,
+      maskedTotal: mask.length,
+      originalTotal: original.length,
+      comparisonTotal,
+      percentage: comparisonTotal ? Math.round((matched / comparisonTotal) * 100) : 0,
       valid,
       sameLength,
+      shortageMessage,
       mismatchPositions,
     };
   }, [maskedName, originalName]);
@@ -185,10 +196,11 @@ export default function Home() {
               <div className="adjustedName"><small>HASIL PENYESUAIAN</small><strong>{validation.adjusted || "—"}</strong></div>
               <div className="resultStats">
                 <div><strong>{validation.matched}</strong><span>Huruf sesuai</span></div>
-                <div><strong>{validation.total}</strong><span>Total huruf</span></div>
+                <div><strong>{validation.maskedTotal}</strong><span>Nama tersamarkan</span></div>
+                <div><strong>{validation.originalTotal}</strong><span>Nama asli</span></div>
                 <div><strong>{validation.percentage}%</strong><span>Tingkat cocok</span></div>
               </div>
-              <p className="resultSummary">{validation.matched} dari {validation.total} huruf sesuai{!validation.sameLength ? ". Jumlah huruf kedua nama berbeda." : "."}{validation.mismatchPositions.length > 0 ? ` Posisi tidak cocok: ${validation.mismatchPositions.join(", ")}.` : ""}</p>
+              <p className="resultSummary">{validation.matched} dari {validation.comparisonTotal} posisi huruf sesuai. {validation.shortageMessage}{validation.mismatchPositions.length > 0 ? ` Posisi tidak cocok atau kosong: ${validation.mismatchPositions.join(", ")}.` : ""}</p>
             </div>}
           </section> : <>
           <section className="panel formPanel">
