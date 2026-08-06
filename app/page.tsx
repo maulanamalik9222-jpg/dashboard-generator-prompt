@@ -25,6 +25,61 @@ const initial: FormState = {
   jadwalLama: "23:30 WIB", jadwalBaru: "22:45 WIB", catatan: "Teks harus tajam, rapi, mudah dibaca, dan tidak terpotong.",
 };
 
+const themeBank = [
+  "Phoenix royal bercahaya dengan sayap energi dan ornamen kerajaan",
+  "Serigala bulan neon di hutan mistis dengan kabut sinematik",
+  "Harimau emas penjaga gerbang emerald dengan aura berwibawa",
+  "Topeng wayang luxury dengan ornamen Nusantara dan cahaya magis",
+  "Kota futuristik cyber-luxury dengan hologram dan partikel cahaya",
+  "Elang kristal di puncak pegunungan dengan langit dramatis",
+  "Istana bawah laut turquoise dengan mutiara dan cahaya caustic",
+  "Naga oriental emas di antara awan giok dan kilat halus",
+  "Ksatria cosmic dengan armor perak dan portal galaksi",
+  "Candi cahaya emerald dengan relief kuno dan atmosfer sakral",
+];
+
+const colorBank = [
+  "Emerald green, aqua blue, cyan glow, gold accent",
+  "Deep navy, electric blue, silver chrome, white glow",
+  "Royal purple, magenta neon, black, champagne gold",
+  "Forest green, turquoise, antique gold, warm amber",
+  "Matte black, premium red, metallic gold, white highlight",
+  "Midnight blue, violet, cyan plasma, silver accent",
+  "Burgundy, rose gold, charcoal black, cream highlight",
+  "Teal, jade green, platinum silver, electric aqua",
+];
+
+const styleBank = [
+  "Premium cinematic advertising, glossy 3D, dramatic rim lighting",
+  "Luxury editorial, clean hierarchy, realistic 4D depth, soft glow",
+  "Epic fantasy cinematic, ultra-detailed, volumetric lighting",
+  "Modern futuristic, glassmorphism panels, neon edge lighting",
+  "Mythical creature art, symmetrical composition, royal atmosphere",
+  "High-end sports advertising, dynamic perspective, energetic particles",
+  "Elegant dark luxury, centered composition, metallic embossed details",
+  "Anime cinematic premium, sharp character detail, dramatic environment",
+];
+
+const headlines: Record<Kind, string[]> = {
+  kemenangan: ["SELAMAT KEPADA PEMENANG", "KEMENANGAN SPEKTAKULER", "JACKPOT BERHASIL DIRAIH", "BUKTI KEMENANGAN HARI INI", "CUAN BESAR SUDAH CAIR"],
+  syair: ["SYAIR RAHASIA HARI INI", "BISIKAN ANGKA MALAM INI", "SYAIR PREMIUM PILIHAN", "PETUNJUK MISTERI HARI INI", "SYAIR EKSKLUSIF TERBARU"],
+  prediksi: ["ANGKA PREDIKSI HARI INI", "PREDIKSI PILIHAN TERBAIK", "ANGKA JITU HARI INI", "PREDIKSI PREMIUM TERBARU", "FORMASI ANGKA PILIHAN"],
+  jadwal: ["PERUBAHAN JADWAL PASARAN", "INFORMASI JADWAL TERBARU", "UPDATE JAM PENUTUPAN", "PENGUMUMAN PERUBAHAN WAKTU", "JADWAL PASARAN DIPERBARUI"],
+};
+
+const noteBank = [
+  "Teks harus tajam, rapi, mudah dibaca, dan tidak terpotong. Gunakan ruang kosong yang seimbang.",
+  "Prioritaskan hierarchy teks, detail karakter, dan keterbacaan pada layar ponsel. Hindari desain terlalu ramai.",
+  "Buat fokus visual kuat di tengah, panel informasi bersih, dan semua tulisan terbaca jelas dalam ukuran kecil.",
+  "Gunakan lighting sinematik, detail HD, efek premium secukupnya, tanpa watermark atau elemen brand lain.",
+  "Komposisi harus eksklusif, profesional, simetris, dan siap digunakan sebagai iklan media sosial.",
+];
+
+function pickDifferent(list: string[], current: string) {
+  const choices = list.filter((item) => item !== current);
+  return choices[Math.floor(Math.random() * choices.length)] ?? list[0];
+}
+
 function Field({ label, value, onChange, placeholder, area = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean }) {
   const props = { value, placeholder, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value) };
   return <label className="field"><span>{label}</span>{area ? <textarea {...props} rows={3} /> : <input {...props} />}</label>;
@@ -47,9 +102,9 @@ export default function Home() {
     const common = `Buat desain poster ${form.rasio} untuk brand ${form.brand}. Gaya visual ${form.gaya}. Gunakan palet warna ${form.warna}. Komposisi profesional, detail sangat tajam, pencahayaan sinematik, kontras kuat, kualitas iklan premium, siap posting di media sosial.`;
     const endings = `\n\nKetentuan: ${form.catatan} Logo ${form.brand} harus terlihat jelas dan eksklusif. Jangan menambah logo, watermark, atau nama brand lain.`;
     if (kind === "kemenangan") return `${common}\n\nTema: postingan kemenangan terpercaya dan berkelas. Tampilkan headline besar “${form.headline}”, nama pasaran “${form.pasaran}”, tanggal “${form.tanggal}”, nominal kemenangan “${form.nominal}”, dan angka kemenangan “${form.angka}”. Tambahkan elemen confetti halus, cahaya kemenangan, tiket atau koin premium tanpa membuat desain terlalu ramai.${endings}`;
-    if (kind === "syair") return `${common}\n\nTema utama: ${form.tema}. Buat postingan syair misterius, elegan, dan berkelas untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Sediakan panel syair utama dengan ruang teks yang lega, ornamen tematik, serta judul “SYAIR ${form.pasaran}”. Nuansa magis tetapi teks tetap menjadi fokus.${endings}`;
-    if (kind === "prediksi") return `${common}\n\nBuat poster ANGKA PREDIKSI premium untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Angka utama “${form.angka}” harus sangat besar, jelas, berjajar rapi, memiliki efek 3D glossy dan glow lembut. Gunakan tema ${form.tema}. Tambahkan panel informasi yang bersih dan hierarchy visual yang kuat.${endings}`;
-    return `${common}\n\nBuat poster pengumuman “PERUBAHAN JADWAL PASARAN” untuk ${form.pasaran}, tanggal ${form.tanggal}. Tampilkan jadwal lama “${form.jadwalLama}” dengan penanda lama, panah perubahan yang jelas, lalu jadwal baru “${form.jadwalBaru}” sebagai fokus terbesar. Suasana resmi, informatif, mendesak tetapi tetap elegan.${endings}`;
+    if (kind === "syair") return `${common}\n\nTema utama: ${form.tema}. Buat postingan syair misterius, elegan, dan berkelas untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Gunakan headline “${form.headline}”. Sediakan panel syair utama dengan ruang teks yang lega, ornamen tematik, dan nuansa magis, tetapi teks tetap menjadi fokus.${endings}`;
+    if (kind === "prediksi") return `${common}\n\nBuat poster dengan headline “${form.headline}” untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Angka utama “${form.angka}” harus sangat besar, jelas, berjajar rapi, memiliki efek 3D glossy dan glow lembut. Gunakan tema ${form.tema}. Tambahkan panel informasi yang bersih dan hierarchy visual yang kuat.${endings}`;
+    return `${common}\n\nBuat poster pengumuman dengan headline “${form.headline}” untuk ${form.pasaran}, tanggal ${form.tanggal}. Tampilkan jadwal lama “${form.jadwalLama}” dengan penanda lama, panah perubahan yang jelas, lalu jadwal baru “${form.jadwalBaru}” sebagai fokus terbesar. Suasana resmi, informatif, mendesak tetapi tetap elegan.${endings}`;
   }, [kind, form]);
 
   const copyPrompt = async () => {
@@ -59,6 +114,18 @@ export default function Home() {
   const savePrompt = () => {
     const next = [prompt, ...history.filter((x) => x !== prompt)].slice(0, 8);
     setHistory(next); localStorage.setItem("prompt-history", JSON.stringify(next));
+  };
+
+  const generatePrompt = () => {
+    setForm((old) => ({
+      ...old,
+      tema: pickDifferent(themeBank, old.tema),
+      warna: pickDifferent(colorBank, old.warna),
+      gaya: pickDifferent(styleBank, old.gaya),
+      headline: pickDifferent(headlines[kind], old.headline),
+      catatan: pickDifferent(noteBank, old.catatan),
+    }));
+    setCopied(false);
   };
 
   return (
@@ -94,7 +161,7 @@ export default function Home() {
           <section className="panel outputPanel">
             <div className="panelHead"><div><span>02</span><h2>Prompt Siap Pakai</h2></div><span className="live">● LIVE</span></div>
             <div className="promptBox"><div className="promptTop"><span>GENERATED PROMPT</span><span>{prompt.length} karakter</span></div><p>{prompt}</p></div>
-            <div className="actions"><button className="primary" onClick={copyPrompt}>{copied ? "✓ Berhasil Disalin" : "Salin Prompt"}</button><button className="secondary" onClick={savePrompt}>Simpan Riwayat</button></div>
+            <div className="actions triple"><button className="generate" onClick={generatePrompt}>✦ Generate Prompt</button><button className="primary" onClick={copyPrompt}>{copied ? "✓ Tersalin" : "Salin Prompt"}</button><button className="secondary" onClick={savePrompt}>Simpan</button></div>
             <div className="quality"><span>✓</span><div><b>Prompt sudah dioptimalkan</b><small>Struktur, visual, teks, dan batasan sudah lengkap.</small></div></div>
           </section>
         </div>
