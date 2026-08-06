@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal";
+type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi";
 type FormState = {
   brand: string; pasaran: string; tanggal: string; headline: string;
   nominal: string; angka: string; tema: string; warna: string;
@@ -15,6 +15,7 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
   { id: "syair", label: "Postingan Syair", icon: "✦", hint: "Syair premium penuh atmosfer" },
   { id: "prediksi", label: "Postingan Prediksi", icon: "◎", hint: "Angka prediksi yang mudah dibaca" },
   { id: "jadwal", label: "Perubahan Jadwal", icon: "◷", hint: "Pengumuman jadwal pasaran" },
+  { id: "validasi", label: "Validasi Dana", icon: "✓", hint: "Cocokkan nama penerima dana" },
 ];
 
 const initial: FormState = {
@@ -65,6 +66,7 @@ const headlines: Record<Kind, string[]> = {
   syair: ["SYAIR RAHASIA HARI INI", "BISIKAN ANGKA MALAM INI", "SYAIR PREMIUM PILIHAN", "PETUNJUK MISTERI HARI INI", "SYAIR EKSKLUSIF TERBARU"],
   prediksi: ["ANGKA PREDIKSI HARI INI", "PREDIKSI PILIHAN TERBAIK", "ANGKA JITU HARI INI", "PREDIKSI PREMIUM TERBARU", "FORMASI ANGKA PILIHAN"],
   jadwal: ["PERUBAHAN JADWAL PASARAN", "INFORMASI JADWAL TERBARU", "UPDATE JAM PENUTUPAN", "PENGUMUMAN PERUBAHAN WAKTU", "JADWAL PASARAN DIPERBARUI"],
+  validasi: ["VALIDASI NAMA PENERIMA"],
 };
 
 const noteBank = [
@@ -90,6 +92,9 @@ export default function Home() {
   const [form, setForm] = useState<FormState>(initial);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+  const [maskedName, setMaskedName] = useState("GARXX GARXXXX");
+  const [originalName, setOriginalName] = useState("GARIN GARNIDA");
+  const [validationReady, setValidationReady] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
@@ -97,6 +102,32 @@ export default function Home() {
   }, []);
 
   const update = (key: keyof FormState) => (value: string) => setForm((old) => ({ ...old, [key]: value }));
+
+  const validation = useMemo(() => {
+    const mask = maskedName.toUpperCase().replace(/[^A-Z]/g, "");
+    const original = originalName.toUpperCase().replace(/[^A-Z]/g, "");
+    let matched = 0;
+    const mismatchPositions: number[] = [];
+    for (let i = 0; i < original.length; i++) {
+      const maskChar = mask[i];
+      const isMatch = maskChar === "X" || maskChar === original[i];
+      if (isMatch) matched++;
+      else mismatchPositions.push(i + 1);
+    }
+    const sameLength = mask.length === original.length;
+    const valid = original.length > 0 && sameLength && matched === original.length;
+    return {
+      mask,
+      original,
+      adjusted: originalName.trim().replace(/\s+/g, " ").toUpperCase(),
+      matched,
+      total: original.length,
+      percentage: original.length ? Math.round((matched / original.length) * 100) : 0,
+      valid,
+      sameLength,
+      mismatchPositions,
+    };
+  }, [maskedName, originalName]);
 
   const prompt = useMemo(() => {
     const common = `Buat desain poster ${form.rasio} untuk brand ${form.brand}. Gaya visual ${form.gaya}. Gunakan palet warna ${form.warna}. Komposisi profesional, detail sangat tajam, pencahayaan sinematik, kontras kuat, kualitas iklan premium, siap posting di media sosial.`;
@@ -140,7 +171,26 @@ export default function Home() {
       <section className="workspace">
         <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><h1>Rancang prompt. <em>Lebih cepat.</em></h1><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
 
-        <div className="grid">
+        <div className={kind === "validasi" ? "grid validationGrid" : "grid"}>
+          {kind === "validasi" ? <section className="panel validationPanel">
+            <div className="panelHead"><div><span>01</span><h2>Pengecekan Validasi Dana</h2></div><button className="ghost" onClick={() => { setMaskedName(""); setOriginalName(""); setValidationReady(false); }}>Reset</button></div>
+            <div className="validationIntro"><b>COCOKKAN NAMA SECARA OTOMATIS</b><p>Huruf <strong>X</strong> dianggap sebagai huruf yang disembunyikan. Spasi dan tanda baca tidak dihitung.</p></div>
+            <div className="validationInputs">
+              <Field label="Tempel Nama Tersamarkan" value={maskedName} onChange={(value) => { setMaskedName(value); setValidationReady(false); }} placeholder="Contoh: GARXX GARXXXX" />
+              <Field label="Tempel Nama Asli" value={originalName} onChange={(value) => { setOriginalName(value); setValidationReady(false); }} placeholder="Contoh: GARIN GARNIDA" />
+            </div>
+            <button className="validateButton" onClick={() => setValidationReady(true)}>✓ Hitung & Cocokkan Huruf</button>
+            {validationReady && <div className={validation.valid ? "validationResult success" : "validationResult failed"}>
+              <div className="resultStatus"><span>{validation.valid ? "✓" : "!"}</span><div><small>STATUS VALIDASI</small><b>{validation.valid ? "NAMA SESUAI & COCOK" : "NAMA TIDAK SEPENUHNYA COCOK"}</b></div></div>
+              <div className="adjustedName"><small>HASIL PENYESUAIAN</small><strong>{validation.adjusted || "—"}</strong></div>
+              <div className="resultStats">
+                <div><strong>{validation.matched}</strong><span>Huruf sesuai</span></div>
+                <div><strong>{validation.total}</strong><span>Total huruf</span></div>
+                <div><strong>{validation.percentage}%</strong><span>Tingkat cocok</span></div>
+              </div>
+              <p className="resultSummary">{validation.matched} dari {validation.total} huruf sesuai{!validation.sameLength ? ". Jumlah huruf kedua nama berbeda." : "."}{validation.mismatchPositions.length > 0 ? ` Posisi tidak cocok: ${validation.mismatchPositions.join(", ")}.` : ""}</p>
+            </div>}
+          </section> : <>
           <section className="panel formPanel">
             <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm(initial)}>Reset</button></div>
             {kind === "kemenangan" && <div className="referenceGuide"><b>3 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><span><i>3</i> Bukti transfer</span><small>Unggah ketiganya bersama prompt hasil generator.</small></div>}
@@ -165,9 +215,10 @@ export default function Home() {
             <div className="actions triple"><button className="generate" onClick={generatePrompt}>✦ Generate Prompt</button><button className="primary" onClick={copyPrompt}>{copied ? "✓ Tersalin" : "Salin Prompt"}</button><button className="secondary" onClick={savePrompt}>Simpan</button></div>
             <div className="quality"><span>✓</span><div><b>Prompt sudah dioptimalkan</b><small>Struktur, visual, teks, dan batasan sudah lengkap.</small></div></div>
           </section>
+          </>}
         </div>
 
-        {history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
+        {kind !== "validasi" && history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
       </section>
     </main>
   );
