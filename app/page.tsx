@@ -174,14 +174,14 @@ export default function Home() {
   return (
     <AuthGate><main className="shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brandMark">PG</div><div><b>PROMPTGEN</b><span>Creative Dashboard</span></div></div>
+        <div className="brand"><div className="brandMark">PG</div><div><b>DASHBOARD<br />PREMAN KARO</b></div></div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
         <div className="sideNote"><b>Tips hasil terbaik</b><p>Isi data selengkap mungkin. Gunakan angka, tanggal, warna, dan ukuran yang spesifik.</p></div>
       </aside>
 
       <section className="workspace">
-        <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><h1>Rancang prompt. <em>Lebih cepat.</em></h1><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
+        <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
 
         <div className={kind === "validasi" ? "grid validationGrid" : "grid"}>
           {kind === "validasi" ? <section className="panel validationPanel">
