@@ -174,7 +174,9 @@ export default function Home() {
   return (
     <AuthGate><main className="shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brandMark">PG</div><div><b>DASHBOARD<br />PREMAN KARO</b></div></div>
+        <div className="brand">
+          <img className="brandLogo" src="/team-preman-karo.jpg" alt="Team Preman Karo" />
+        </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
         <div className="sideNote"><b>Tips hasil terbaik</b><p>Isi data selengkap mungkin. Gunakan angka, tanggal, warna, dan ukuran yang spesifik.</p></div>
