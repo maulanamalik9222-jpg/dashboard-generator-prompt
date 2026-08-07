@@ -1,7 +1,7 @@
 "use client";
 import { useEffect,useState } from "react";
 type User={id:string;name:string;email:string;role:"admin"|"user"};
-async function api(body?:unknown){const r=await fetch("/api/auth",body?{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw new Error(d.error);return d;}
+async function api(body?:unknown){const r=await fetch("/api/auth",body?{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}:{});const text=await r.text();let d:any={};try{d=text?JSON.parse(text):{}}catch{d={error:"Server tidak mengirim respons yang valid."}}if(!r.ok)throw new Error(d.error||`Server error (${r.status})`);return d;}
 export default function AuthGate({children}:{children:React.ReactNode}){const[user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true),[mode,setMode]=useState<"login"|"register">("login"),[error,setError]=useState(""),[admin,setAdmin]=useState(false),[users,setUsers]=useState<any[]>([]);
  const load=()=>api().then(d=>{setUser(d.user);const left=Math.max(0,d.expiresAt-Date.now());setTimeout(()=>location.reload(),left+500)}).catch(()=>setUser(null)).finally(()=>setLoading(false));useEffect(()=>{load()},[]);
  async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setError("");const f=new FormData(e.currentTarget);try{await api({action:mode,...Object.fromEntries(f)});await load()}catch(x:any){setError(x.message)}}
