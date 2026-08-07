@@ -193,15 +193,14 @@ export default function Home() {
             </div>
             <button className="validateButton" onClick={() => setValidationReady(true)}>✓ Hitung & Cocokkan Huruf</button>
             {validationReady && <div className={validation.valid ? "validationResult success" : "validationResult failed"}>
-              <div className="resultStatus"><span>{validation.valid ? "✓" : "!"}</span><div><small>STATUS VALIDASI</small><b>{validation.valid ? "NAMA SESUAI & COCOK" : "NAMA TIDAK SEPENUHNYA COCOK"}</b></div></div>
+              <div className="resultStatus"><span>{validation.valid ? "✓" : "!"}</span><div><small>STATUS VALIDASI</small><b>{validation.valid ? "COCOK" : "TIDAK COCOK"}</b></div></div>
               <div className="adjustedName"><small>HASIL PENYESUAIAN</small><strong>{validation.adjusted || "—"}</strong></div>
               <div className="resultStats">
-                <div><strong>{validation.matched}</strong><span>Huruf sesuai</span></div>
                 <div><strong>{validation.maskedTotal}</strong><span>Nama tersamarkan</span></div>
                 <div><strong>{validation.originalTotal}</strong><span>Nama asli</span></div>
-                <div><strong>{validation.percentage}%</strong><span>Tingkat cocok</span></div>
+                <div className={validation.valid ? "matchCard valid" : "matchCard invalid"}><strong>{validation.valid ? "COCOK" : "TIDAK COCOK"}</strong><span>Status</span></div>
               </div>
-              <p className="resultSummary">{validation.matched} dari {validation.comparisonTotal} posisi huruf sesuai. {validation.shortageMessage}{validation.mismatchPositions.length > 0 ? ` Posisi tidak cocok atau kosong: ${validation.mismatchPositions.join(", ")}.` : ""}</p>
+              <p className="resultSummary">{validation.shortageMessage}{validation.mismatchPositions.length > 0 ? ` Posisi tidak cocok atau kosong: ${validation.mismatchPositions.join(", ")}.` : ""}</p>
             </div>}
           </section> : <>
           <section className="panel formPanel">
