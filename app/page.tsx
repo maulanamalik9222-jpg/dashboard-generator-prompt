@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AuthGate from "./auth-gate";
 
-type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi";
+type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi" | "usdt";
 type FormState = {
   brand: string; pasaran: string; tanggal: string; headline: string;
   nominal: string; angka: string; tema: string; warna: string;
@@ -17,6 +17,7 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
   { id: "prediksi", label: "Postingan Prediksi", icon: "◎", hint: "Angka prediksi yang mudah dibaca" },
   { id: "jadwal", label: "Perubahan Jadwal", icon: "◷", hint: "Pengumuman jadwal pasaran" },
   { id: "validasi", label: "Validasi Dana", icon: "✓", hint: "Cocokkan nama penerima dana" },
+  { id: "usdt", label: "Update USDT", icon: "₮", hint: "Buat informasi rate terbaru" },
 ];
 
 function getAutomaticDate() {
@@ -26,6 +27,21 @@ function getAutomaticDate() {
     month: "long",
     year: "numeric",
   }).format(new Date()).toUpperCase();
+}
+
+function getAutomaticDateTime() {
+  const parts = new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("day")} ${value("month").toUpperCase()} ${value("year")} (${value("hour")}:${value("minute")}:${value("second")} WIB)`;
 }
 
 const initial: FormState = {
@@ -77,6 +93,7 @@ const headlines: Record<Kind, string[]> = {
   prediksi: ["ANGKA PREDIKSI HARI INI", "PREDIKSI PILIHAN TERBAIK", "ANGKA JITU HARI INI", "PREDIKSI PREMIUM TERBARU", "FORMASI ANGKA PILIHAN"],
   jadwal: ["PERUBAHAN JADWAL PASARAN", "INFORMASI JADWAL TERBARU", "UPDATE JAM PENUTUPAN", "PENGUMUMAN PERUBAHAN WAKTU", "JADWAL PASARAN DIPERBARUI"],
   validasi: ["VALIDASI NAMA PENERIMA"],
+  usdt: ["UPDATE RATE USDT"],
 };
 
 const noteBank = [
@@ -105,10 +122,23 @@ export default function Home() {
   const [maskedName, setMaskedName] = useState("GARXX GARXXXX");
   const [originalName, setOriginalName] = useState("GARIN GARNIDA");
   const [validationReady, setValidationReady] = useState(false);
+  const [usdtDeposit, setUsdtDeposit] = useState("17,755");
+  const [usdtWithdraw, setUsdtWithdraw] = useState("17,933");
+  const [usdtLinkOne, setUsdtLinkOne] = useState("");
+  const [usdtLinkTwo, setUsdtLinkTwo] = useState("");
+  const [usdtDateTime, setUsdtDateTime] = useState(getAutomaticDateTime());
+  const [usdtCopied, setUsdtCopied] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
     if (saved) setHistory(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    const syncClock = () => setUsdtDateTime(getAutomaticDateTime());
+    syncClock();
+    const timer = window.setInterval(syncClock, 1_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -173,6 +203,14 @@ export default function Home() {
     await navigator.clipboard.writeText(prompt);
     setCopied(true); setTimeout(() => setCopied(false), 1600);
   };
+
+  const usdtResult = `RATE SEKARANG\nUSDT Ratio Deposit : ${usdtDeposit || "-"}\nUSDT Ratio Withdraw : ${usdtWithdraw || "-"}\nUPDATE : ${usdtDateTime}\n${usdtLinkOne || "-"}\n${usdtLinkTwo || "-"}`;
+
+  const copyUsdtResult = async () => {
+    await navigator.clipboard.writeText(usdtResult);
+    setUsdtCopied(true);
+    window.setTimeout(() => setUsdtCopied(false), 1_600);
+  };
   const savePrompt = () => {
     const next = [prompt, ...history.filter((x) => x !== prompt)].slice(0, 8);
     setHistory(next); localStorage.setItem("prompt-history", JSON.stringify(next));
@@ -204,7 +242,7 @@ export default function Home() {
       <section className="workspace">
         <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
 
-        <div className={kind === "validasi" ? "grid validationGrid" : "grid"}>
+        <div className={kind === "validasi" ? "grid validationGrid" : kind === "usdt" ? "grid usdtGrid" : "grid"}>
           {kind === "validasi" ? <section className="panel validationPanel">
             <div className="panelHead"><div><span>01</span><h2>Pengecekan Validasi Dana</h2></div><button className="ghost" onClick={() => { setMaskedName(""); setOriginalName(""); setValidationReady(false); }}>Reset</button></div>
             <div className="validationIntro"><b>COCOKKAN NAMA SECARA OTOMATIS</b><p>Huruf <strong>X</strong> dianggap sebagai huruf yang disembunyikan. Spasi dan tanda baca tidak dihitung.</p></div>
@@ -223,7 +261,26 @@ export default function Home() {
               </div>
               <p className="resultSummary">{validation.shortageMessage}{validation.mismatchPositions.length > 0 ? ` Posisi tidak cocok atau kosong: ${validation.mismatchPositions.join(", ")}.` : ""}</p>
             </div>}
-          </section> : <>
+          </section> : kind === "usdt" ? <>
+          <section className="panel usdtFormPanel">
+            <div className="panelHead"><div><span>01</span><h2>Data Update USDT</h2></div><button className="ghost" onClick={() => { setUsdtDeposit(""); setUsdtWithdraw(""); setUsdtLinkOne(""); setUsdtLinkTwo(""); }}>Reset</button></div>
+            <div className="usdtIntro"><b>UPDATE RATE OTOMATIS</b><p>Isi kedua rasio dan tempel dua link screenshot. Tanggal serta waktu WIB dibuat otomatis sampai hitungan detik.</p></div>
+            <div className="usdtInputs">
+              <Field label="USDT Ratio Deposit" value={usdtDeposit} onChange={setUsdtDeposit} placeholder="Contoh: 17,755" />
+              <Field label="USDT Ratio Withdraw" value={usdtWithdraw} onChange={setUsdtWithdraw} placeholder="Contoh: 17,933" />
+              <div className="wide"><Field label="Link Screenshot 1" value={usdtLinkOne} onChange={setUsdtLinkOne} placeholder="Tempel link screenshot pertama" /></div>
+              <div className="wide"><Field label="Link Screenshot 2" value={usdtLinkTwo} onChange={setUsdtLinkTwo} placeholder="Tempel link screenshot kedua" /></div>
+            </div>
+            <div className="usdtClock"><span>● LIVE WIB</span><strong>{usdtDateTime}</strong></div>
+          </section>
+
+          <section className="panel usdtOutputPanel">
+            <div className="panelHead"><div><span>02</span><h2>Hasil Siap Salin</h2></div><span className="live">● LIVE</span></div>
+            <div className="usdtResultCard"><pre>{usdtResult}</pre></div>
+            <button className="usdtCopyButton" onClick={copyUsdtResult}>{usdtCopied ? "✓ HASIL TERSALIN" : "COPY HASIL"}</button>
+            <div className="usdtReady"><span>✓</span><div><b>Hasil diperbarui otomatis</b><small>Perubahan input dan waktu langsung muncul di panel hasil.</small></div></div>
+          </section>
+          </> : <>
           <section className="panel formPanel">
             <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm({ ...initial, tanggal: getAutomaticDate() })}>Reset</button></div>
             {kind === "kemenangan" && <div className="referenceGuide"><b>3 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><span><i>3</i> Bukti transfer</span><small>Unggah ketiganya bersama prompt hasil generator.</small></div>}
@@ -251,7 +308,7 @@ export default function Home() {
           </>}
         </div>
 
-        {kind !== "validasi" && history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
+        {kind !== "validasi" && kind !== "usdt" && history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
       </section>
     </main></AuthGate>
   );
