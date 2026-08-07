@@ -19,8 +19,17 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
   { id: "validasi", label: "Validasi Dana", icon: "✓", hint: "Cocokkan nama penerima dana" },
 ];
 
+function getAutomaticDate() {
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date()).toUpperCase();
+}
+
 const initial: FormState = {
-  brand: "TOGELUP", pasaran: "SINGAPORE TOTO", tanggal: "6 AGUSTUS 2026",
+  brand: "TOGELUP", pasaran: "SINGAPORE TOTO", tanggal: getAutomaticDate(),
   headline: "SELAMAT KEPADA PEMENANG", nominal: "Rp 51.000.000", angka: "8 7 4 2",
   tema: "Phoenix royal bercahaya", warna: "Emerald green, aqua blue, cyan glow, gold accent",
   rasio: "4:5 — 1080 × 1350 px", gaya: "Premium, cinematic, HD, glossy 3D",
@@ -83,8 +92,8 @@ function pickDifferent(list: string[], current: string) {
   return choices[Math.floor(Math.random() * choices.length)] ?? list[0];
 }
 
-function Field({ label, value, onChange, placeholder, area = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean }) {
-  const props = { value, placeholder, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value) };
+function Field({ label, value, onChange, placeholder, area = false, readOnly = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean; readOnly?: boolean }) {
+  const props = { value, placeholder, readOnly, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value) };
   return <label className="field"><span>{label}</span>{area ? <textarea {...props} rows={3} /> : <input {...props} />}</label>;
 }
 
@@ -100,6 +109,16 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
     if (saved) setHistory(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    const syncAutomaticDate = () => {
+      const today = getAutomaticDate();
+      setForm((old) => old.tanggal === today ? old : { ...old, tanggal: today });
+    };
+    syncAutomaticDate();
+    const timer = window.setInterval(syncAutomaticDate, 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const update = (key: keyof FormState) => (value: string) => setForm((old) => ({ ...old, [key]: value }));
@@ -206,12 +225,12 @@ export default function Home() {
             </div>}
           </section> : <>
           <section className="panel formPanel">
-            <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm(initial)}>Reset</button></div>
+            <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm({ ...initial, tanggal: getAutomaticDate() })}>Reset</button></div>
             {kind === "kemenangan" && <div className="referenceGuide"><b>3 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><span><i>3</i> Bukti transfer</span><small>Unggah ketiganya bersama prompt hasil generator.</small></div>}
             <div className="formGrid">
               <Field label="Nama Brand" value={form.brand} onChange={update("brand")} />
               {kind !== "kemenangan" && <Field label="Nama Pasaran" value={form.pasaran} onChange={update("pasaran")} />}
-              <Field label="Tanggal Posting" value={form.tanggal} onChange={update("tanggal")} />
+              <Field label="Tanggal Posting (Otomatis)" value={form.tanggal} onChange={update("tanggal")} readOnly />
               {kind === "kemenangan" && <><Field label="Headline" value={form.headline} onChange={update("headline")} /><Field label="Nominal Kemenangan" value={form.nominal} onChange={update("nominal")} /></>}
               {kind === "prediksi" && <Field label="Angka Prediksi" value={form.angka} onChange={update("angka")} />}
               {kind === "jadwal" && <><Field label="Jadwal Lama" value={form.jadwalLama} onChange={update("jadwalLama")} /><Field label="Jadwal Baru" value={form.jadwalBaru} onChange={update("jadwalBaru")} /></>}
