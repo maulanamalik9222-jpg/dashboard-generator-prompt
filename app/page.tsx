@@ -175,7 +175,7 @@ export default function Home() {
     <AuthGate><main className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brandLogo" src="/bewok-service-logo.png" alt="Bewok Service" />
+          <img className="brandLogo" src="/logo-harimau-gorila-v2.png" alt="Logo Harimau dan Gorila" />
         </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
