@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AuthGate from "./auth-gate";
 
-type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi" | "usdt";
+type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi" | "usdt" | "result";
 type FormState = {
   brand: string; pasaran: string; tanggal: string; headline: string;
   nominal: string; angka: string; tema: string; warna: string;
@@ -18,6 +18,7 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
   { id: "jadwal", label: "Perubahan Jadwal", icon: "◷", hint: "Pengumuman jadwal pasaran" },
   { id: "validasi", label: "Validasi Dana", icon: "✓", hint: "Cocokkan nama penerima dana" },
   { id: "usdt", label: "Update USDT", icon: "₮", hint: "Buat informasi rate terbaru" },
+  { id: "result", label: "Keterlambatan Result", icon: "!", hint: "Informasi status result pasaran" },
 ];
 
 function getAutomaticDate() {
@@ -94,6 +95,7 @@ const headlines: Record<Kind, string[]> = {
   jadwal: ["PERUBAHAN JADWAL PASARAN", "INFORMASI JADWAL TERBARU", "UPDATE JAM PENUTUPAN", "PENGUMUMAN PERUBAHAN WAKTU", "JADWAL PASARAN DIPERBARUI"],
   validasi: ["VALIDASI NAMA PENERIMA"],
   usdt: ["UPDATE RATE USDT"],
+  result: ["INFORMASI RESULT PASARAN"],
 };
 
 const noteBank = [
@@ -128,6 +130,8 @@ export default function Home() {
   const [usdtLinkTwo, setUsdtLinkTwo] = useState("");
   const [usdtDateTime, setUsdtDateTime] = useState(getAutomaticDateTime());
   const [usdtCopied, setUsdtCopied] = useState(false);
+  const [resultMarket, setResultMarket] = useState("KENTUCKYEVE");
+  const [resultCopied, setResultCopied] = useState<"delay" | "done" | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
@@ -211,6 +215,16 @@ export default function Home() {
     setUsdtCopied(true);
     window.setTimeout(() => setUsdtCopied(false), 1_600);
   };
+
+  const normalizedMarket = resultMarket.trim().replace(/\s+/g, " ").toUpperCase() || "NAMA PASARAN";
+  const delayedResultText = `Yth. Member Setia TOGELUP\nKami ingin menginformasikan bahwa untuk Pasaran ${normalizedMarket}\nsaat ini terjadi keterlambatan result dari pihak penyedia belum mengeluarkan angka result.\nMohon kesabarannya menunggu dan untuk estimasi waktu tidak dapat ditentukan. Terima kasih.`;
+  const completedResultText = `Yth. Member Setia TOGELUP\nKami ingin menginformasikan bahwa Pasaran ${normalizedMarket} saat ini sudah mengeluarkan angka result.\nMohon maaf atas ketidaknyamanan sebelumnya. Terima kasih.`;
+
+  const copyResultText = async (type: "delay" | "done", text: string) => {
+    await navigator.clipboard.writeText(text);
+    setResultCopied(type);
+    window.setTimeout(() => setResultCopied(null), 1_600);
+  };
   const savePrompt = () => {
     const next = [prompt, ...history.filter((x) => x !== prompt)].slice(0, 8);
     setHistory(next); localStorage.setItem("prompt-history", JSON.stringify(next));
@@ -242,7 +256,7 @@ export default function Home() {
       <section className="workspace">
         <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
 
-        <div className={kind === "validasi" ? "grid validationGrid" : kind === "usdt" ? "grid usdtGrid" : "grid"}>
+        <div className={kind === "validasi" ? "grid validationGrid" : kind === "usdt" || kind === "result" ? "grid usdtGrid" : "grid"}>
           {kind === "validasi" ? <section className="panel validationPanel">
             <div className="panelHead"><div><span>01</span><h2>Pengecekan Validasi Dana</h2></div><button className="ghost" onClick={() => { setMaskedName(""); setOriginalName(""); setValidationReady(false); }}>Reset</button></div>
             <div className="validationIntro"><b>COCOKKAN NAMA SECARA OTOMATIS</b><p>Huruf <strong>X</strong> dianggap sebagai huruf yang disembunyikan. Spasi dan tanda baca tidak dihitung.</p></div>
@@ -280,6 +294,26 @@ export default function Home() {
             <button className="usdtCopyButton" onClick={copyUsdtResult}>{usdtCopied ? "✓ HASIL TERSALIN" : "COPY HASIL"}</button>
             <div className="usdtReady"><span>✓</span><div><b>Hasil diperbarui otomatis</b><small>Perubahan input dan waktu langsung muncul di panel hasil.</small></div></div>
           </section>
+          </> : kind === "result" ? <>
+          <section className="panel resultFormPanel">
+            <div className="panelHead"><div><span>01</span><h2>Nama Pasaran</h2></div><button className="ghost" onClick={() => setResultMarket("")}>Reset</button></div>
+            <div className="resultInfoIntro"><b>BUAT INFORMASI RESULT OTOMATIS</b><p>Masukkan nama pasaran satu kali. Kedua format informasi akan langsung diperbarui dan siap disalin.</p></div>
+            <div className="resultMarketInput"><Field label="Nama Pasaran" value={resultMarket} onChange={setResultMarket} placeholder="Contoh: KENTUCKYEVE" /></div>
+            <div className="resultMarketPreview"><small>PASARAN AKTIF</small><strong>{normalizedMarket}</strong></div>
+          </section>
+
+          <section className="resultMessageStack">
+            <article className="panel resultMessageCard delayCard">
+              <div className="resultMessageHead"><div><span>01</span><b>PASARAN KETERLAMBATAN</b></div><span className="delayBadge">TERLAMBAT</span></div>
+              <pre>{delayedResultText}</pre>
+              <button onClick={() => copyResultText("delay", delayedResultText)}>{resultCopied === "delay" ? "✓ HASIL TERSALIN" : "COPY HASIL KETERLAMBATAN"}</button>
+            </article>
+            <article className="panel resultMessageCard doneCard">
+              <div className="resultMessageHead"><div><span>02</span><b>PASARAN SUDAH RESULT</b></div><span className="doneBadge">SUDAH RESULT</span></div>
+              <pre>{completedResultText}</pre>
+              <button onClick={() => copyResultText("done", completedResultText)}>{resultCopied === "done" ? "✓ HASIL TERSALIN" : "COPY HASIL SUDAH RESULT"}</button>
+            </article>
+          </section>
           </> : <>
           <section className="panel formPanel">
             <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm({ ...initial, tanggal: getAutomaticDate() })}>Reset</button></div>
@@ -308,7 +342,7 @@ export default function Home() {
           </>}
         </div>
 
-        {kind !== "validasi" && kind !== "usdt" && history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
+        {kind !== "validasi" && kind !== "usdt" && kind !== "result" && history.length > 0 && <section className="history"><div className="historyTitle"><h2>Riwayat Prompt</h2><button onClick={() => { setHistory([]); localStorage.removeItem("prompt-history"); }}>Hapus semua</button></div><div className="historyGrid">{history.map((item, i) => <button key={i} onClick={() => navigator.clipboard.writeText(item)}><span>#{String(i + 1).padStart(2, "0")}</span><p>{item}</p><b>Salin</b></button>)}</div></section>}
       </section>
     </main></AuthGate>
   );
