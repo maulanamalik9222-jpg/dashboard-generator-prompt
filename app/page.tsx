@@ -146,6 +146,7 @@ export default function Home() {
   const [maskedName, setMaskedName] = useState("GARXX GARXXXX");
   const [originalName, setOriginalName] = useState("GARIN GARNIDA");
   const [validationReady, setValidationReady] = useState(false);
+  const [usdtRaw, setUsdtRaw] = useState("Usdt Ratio Deposit : 17,755\nUsdt Ratio Withdraw : 17,933");
   const [usdtDeposit, setUsdtDeposit] = useState("17,755");
   const [usdtWithdraw, setUsdtWithdraw] = useState("17,933");
   const [usdtLinkOne, setUsdtLinkOne] = useState("");
@@ -178,6 +179,15 @@ export default function Home() {
   }, []);
 
   const update = (key: keyof FormState) => (value: string) => setForm((old) => ({ ...old, [key]: value }));
+
+  const updateUsdtBlock = (value: string) => {
+    setUsdtRaw(value);
+    const clean = value.replace(/\u00a0/g, " ");
+    const deposit = clean.match(/deposit[^0-9]{0,30}([0-9][0-9.,]*)/i)?.[1] ?? "";
+    const withdraw = clean.match(/withdraw[^0-9]{0,30}([0-9][0-9.,]*)/i)?.[1] ?? "";
+    setUsdtDeposit(deposit);
+    setUsdtWithdraw(withdraw);
+  };
 
   const validation = useMemo(() => {
     const mask = maskedName.toUpperCase().replace(/[^A-Z]/g, "");
@@ -328,11 +338,12 @@ export default function Home() {
             </div>}
           </section> : kind === "usdt" ? <>
           <section className="panel usdtFormPanel">
-            <div className="panelHead"><div><span>01</span><h2>Data Update USDT</h2></div><button className="ghost" onClick={() => { setUsdtDeposit(""); setUsdtWithdraw(""); setUsdtLinkOne(""); setUsdtLinkTwo(""); }}>Reset</button></div>
-            <div className="usdtIntro"><b>UPDATE RATE OTOMATIS</b><p>Isi kedua rasio dan tempel dua link screenshot. Tanggal serta waktu WIB dibuat otomatis sampai hitungan detik.</p></div>
+            <div className="panelHead"><div><span>01</span><h2>Data Update USDT</h2></div><button className="ghost" onClick={() => { setUsdtRaw(""); setUsdtDeposit(""); setUsdtWithdraw(""); setUsdtLinkOne(""); setUsdtLinkTwo(""); }}>Reset</button></div>
+            <div className="usdtIntro"><b>TEMPEL BLOK RATE DARI LINE</b><p>Salin dua baris Deposit dan Withdraw sekaligus, lalu tempel di kolom berikut. Dashboard akan mengambil kedua nominal secara otomatis.</p></div>
             <div className="usdtInputs">
-              <Field label="USDT Ratio Deposit" value={usdtDeposit} onChange={setUsdtDeposit} placeholder="Contoh: 17,755" />
-              <Field label="USDT Ratio Withdraw" value={usdtWithdraw} onChange={setUsdtWithdraw} placeholder="Contoh: 17,933" />
+              <div className="wide"><Field label="Tempel Data Ratio Deposit & Withdraw" value={usdtRaw} onChange={updateUsdtBlock} placeholder={"Usdt Ratio Deposit : 17,701\nUsdt Ratio Withdraw : 17,879"} area /></div>
+              <div className="usdtDetected"><small>DEPOSIT TERBACA</small><strong>{usdtDeposit || "BELUM TERBACA"}</strong></div>
+              <div className="usdtDetected"><small>WITHDRAW TERBACA</small><strong>{usdtWithdraw || "BELUM TERBACA"}</strong></div>
               <div className="wide"><Field label="Link Screenshot 1" value={usdtLinkOne} onChange={setUsdtLinkOne} placeholder="Tempel link screenshot pertama" /></div>
               <div className="wide"><Field label="Link Screenshot 2" value={usdtLinkTwo} onChange={setUsdtLinkTwo} placeholder="Tempel link screenshot kedua" /></div>
             </div>
