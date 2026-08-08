@@ -112,9 +112,20 @@ const noteBank = [
   "Komposisi harus eksklusif, profesional, simetris, dan siap digunakan sebagai iklan media sosial.",
 ];
 
+const shioBank = [
+  "KUDA", "ULAR", "NAGA", "KELINCI", "HARIMAU", "KERBAU",
+  "TIKUS", "BABI", "ANJING", "AYAM", "MONYET", "KAMBING",
+];
+
 function pickDifferent(list: string[], current: string) {
   const choices = list.filter((item) => item !== current);
   return choices[Math.floor(Math.random() * choices.length)] ?? list[0];
+}
+
+function randomUniqueNumbers(count: number, maximum: number, digits: number) {
+  const values = new Set<number>();
+  while (values.size < count) values.add(Math.floor(Math.random() * maximum));
+  return Array.from(values).map((value) => String(value).padStart(digits, "0"));
 }
 
 function Field({ label, value, onChange, placeholder, area = false, readOnly = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean; readOnly?: boolean }) {
@@ -237,14 +248,31 @@ export default function Home() {
   };
 
   const generatePrompt = () => {
-    setForm((old) => ({
-      ...old,
-      tema: pickDifferent(themeBank, old.tema),
-      warna: pickDifferent(colorBank, old.warna),
-      gaya: pickDifferent(styleBank, old.gaya),
-      headline: pickDifferent(headlines[kind], old.headline),
-      catatan: pickDifferent(noteBank, old.catatan),
-    }));
+    setForm((old) => {
+      const generated = {
+        ...old,
+        tema: pickDifferent(themeBank, old.tema),
+        warna: pickDifferent(colorBank, old.warna),
+        gaya: pickDifferent(styleBank, old.gaya),
+        headline: pickDifferent(headlines[kind], old.headline),
+        catatan: pickDifferent(noteBank, old.catatan),
+      };
+      if (kind !== "syair") return generated;
+
+      const directions = randomUniqueNumbers(4, 10, 1);
+      return {
+        ...generated,
+        bb2d: randomUniqueNumbers(4, 100, 2).join(", "),
+        arahUtara: directions[0],
+        arahTimur: directions[1],
+        arahSelatan: directions[2],
+        arahBarat: directions[3],
+        bbfs: randomUniqueNumbers(2, 10, 1).join(", "),
+        colokBebas: randomUniqueNumbers(2, 10, 1).join(", "),
+        top4d: randomUniqueNumbers(3, 10_000, 4).join(", "),
+        shio: pickDifferent(shioBank, old.shio),
+      };
+    });
     setCopied(false);
   };
 
@@ -324,23 +352,23 @@ export default function Home() {
           <section className="panel formPanel">
             <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm({ ...initial, tanggal: getAutomaticDate() })}>Reset</button></div>
             {kind === "kemenangan" && <div className="referenceGuide"><b>3 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><span><i>3</i> Bukti transfer</span><small>Unggah ketiganya bersama prompt hasil generator.</small></div>}
-            {kind === "syair" && <div className="syairGuide"><b>FORMAT SYAIR LENGKAP</b><span>BB 2D</span><span>Kompas N–E–S–W</span><span>BBFS</span><span>SHIO</span><span>COLOK BEBAS</span><span>TOP 4D</span><small>Semua data akan dimasukkan tepat ke prompt tanpa diacak.</small></div>}
+            {kind === "syair" && <div className="syairGuide"><b>FORMAT SYAIR LENGKAP</b><span>BB 2D</span><span>Kompas N–E–S–W</span><span>BBFS</span><span>SHIO</span><span>COLOK BEBAS</span><span>TOP 4D</span><small>Tekan Generate Prompt untuk mendapatkan angka dan shio baru secara otomatis.</small></div>}
             <div className="formGrid">
               <Field label="Nama Brand" value={form.brand} onChange={update("brand")} />
               {kind !== "kemenangan" && <Field label="Nama Pasaran" value={form.pasaran} onChange={update("pasaran")} />}
               <Field label="Tanggal Posting (Otomatis)" value={form.tanggal} onChange={update("tanggal")} readOnly />
               {kind === "syair" && <>
                 <Field label="Judul Syair" value={form.judulSyair} onChange={update("judulSyair")} />
-                <Field label="BB 2D (pisahkan dengan koma)" value={form.bb2d} onChange={update("bb2d")} placeholder="39, 26, 74, 57" />
+                <Field label="BB 2D (Otomatis)" value={form.bb2d} onChange={update("bb2d")} readOnly />
                 <div className="wide syairSectionTitle">ANGKA ARAH KOMPAS</div>
-                <Field label="Utara / N" value={form.arahUtara} onChange={update("arahUtara")} />
-                <Field label="Timur / E" value={form.arahTimur} onChange={update("arahTimur")} />
-                <Field label="Selatan / S" value={form.arahSelatan} onChange={update("arahSelatan")} />
-                <Field label="Barat / W" value={form.arahBarat} onChange={update("arahBarat")} />
-                <Field label="BBFS" value={form.bbfs} onChange={update("bbfs")} placeholder="0, 2" />
-                <Field label="Shio" value={form.shio} onChange={update("shio")} placeholder="KELINCI" />
-                <Field label="Colok Bebas" value={form.colokBebas} onChange={update("colokBebas")} placeholder="4, 1" />
-                <Field label="TOP 4D (3 kombinasi)" value={form.top4d} onChange={update("top4d")} placeholder="1507, 1861, 3016" />
+                <Field label="Utara / N (Otomatis)" value={form.arahUtara} onChange={update("arahUtara")} readOnly />
+                <Field label="Timur / E (Otomatis)" value={form.arahTimur} onChange={update("arahTimur")} readOnly />
+                <Field label="Selatan / S (Otomatis)" value={form.arahSelatan} onChange={update("arahSelatan")} readOnly />
+                <Field label="Barat / W (Otomatis)" value={form.arahBarat} onChange={update("arahBarat")} readOnly />
+                <Field label="BBFS (Otomatis)" value={form.bbfs} onChange={update("bbfs")} readOnly />
+                <Field label="Shio (Otomatis)" value={form.shio} onChange={update("shio")} readOnly />
+                <Field label="Colok Bebas (Otomatis)" value={form.colokBebas} onChange={update("colokBebas")} readOnly />
+                <Field label="TOP 4D (Otomatis)" value={form.top4d} onChange={update("top4d")} readOnly />
                 <div className="wide"><Field label="Isi Syair" value={form.isiSyair} onChange={update("isiSyair")} area /></div>
               </>}
               {kind === "kemenangan" && <><Field label="Headline" value={form.headline} onChange={update("headline")} /><Field label="Nominal Kemenangan" value={form.nominal} onChange={update("nominal")} /></>}
