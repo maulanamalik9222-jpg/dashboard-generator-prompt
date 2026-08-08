@@ -8,7 +8,9 @@ type FormState = {
   brand: string; pasaran: string; tanggal: string; headline: string;
   nominal: string; angka: string; tema: string; warna: string;
   rasio: string; gaya: string; jadwalLama: string; jadwalBaru: string;
-  catatan: string;
+  catatan: string; judulSyair: string; bb2d: string; arahUtara: string;
+  arahTimur: string; arahSelatan: string; arahBarat: string; bbfs: string;
+  shio: string; colokBebas: string; top4d: string; isiSyair: string;
 };
 
 const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
@@ -51,6 +53,10 @@ const initial: FormState = {
   tema: "Phoenix royal bercahaya", warna: "Emerald green, aqua blue, cyan glow, gold accent",
   rasio: "4:5 — 1080 × 1350 px", gaya: "Premium, cinematic, HD, glossy 3D",
   jadwalLama: "23:30 WIB", jadwalBaru: "22:45 WIB", catatan: "Teks harus tajam, rapi, mudah dibaca, dan tidak terpotong.",
+  judulSyair: "SYAIR PEDOMAN", bb2d: "39, 26, 74, 57", arahUtara: "5",
+  arahTimur: "8", arahSelatan: "7", arahBarat: "3", bbfs: "0, 2",
+  shio: "KELINCI", colokBebas: "4, 1", top4d: "1507, 1861, 3016",
+  isiSyair: "Kabut tipis turun perlahan\nSuara angin membawa pesan\nPilih angka penuh keyakinan\nSemoga hasil jadi harapan",
 };
 
 const themeBank = [
@@ -198,7 +204,7 @@ export default function Home() {
     const common = `Buat desain poster ${form.rasio} untuk brand ${form.brand}. Gaya visual ${form.gaya}. Gunakan palet warna ${form.warna}. Komposisi profesional, detail sangat tajam, pencahayaan sinematik, kontras kuat, kualitas iklan premium, siap posting di media sosial.`;
     const endings = `\n\nKetentuan: ${form.catatan} Logo ${form.brand} harus terlihat jelas dan eksklusif. Jangan menambah logo, watermark, atau nama brand lain.`;
     if (kind === "kemenangan") return `${common}\n\nGunakan tepat tiga gambar referensi yang saya unggah:\n1. GAMBAR 1 — FOTO WANITA: jadikan sebagai model utama di sisi kiri. Pertahankan kemiripan wajah, bentuk rambut, warna kulit, dan pakaian dari foto asli. Jangan mengganti identitas, jangan membuat wajah baru, dan jangan menambahkan orang lain. Tampilkan setengah badan atau tiga perempat badan dengan pose natural menghadap kamera.\n2. GAMBAR 2 — LOGO SITUS: gunakan logo asli tanpa mengganti tulisan, bentuk, proporsi, atau warna. Letakkan logo secara besar dan jelas di bagian atas poster dengan ruang aman di sekelilingnya. Jangan membuat ulang logo menggunakan teks AI.\n3. GAMBAR 3 — BUKTI TRANSFER: masukkan gambar bukti transfer asli ke dalam layar smartphone premium berukuran besar di sisi kanan. Pertahankan susunan, nominal, tanggal, jam, dan status transaksi dari gambar asli. Jangan mengarang data transaksi. Blur hanya nama bank, nomor rekening, nama pengirim, dan nama penerima untuk privasi; nominal dan status transaksi harus tetap terbaca.\n\nBuat poster bukti kemenangan sederhana tetapi mewah dengan tema visual ${form.tema}. Gunakan headline besar “${form.headline}” dan tampilkan nominal “${form.nominal}” sebagai fokus utama dalam tipografi 3D gold yang sangat menonjol. Cantumkan tanggal posting “${form.tanggal}”. Tambahkan koin emas beterbangan, berlian emerald, partikel cahaya, serta efek kemenangan premium yang menghubungkan model dan smartphone tanpa membuat desain terlalu ramai.\n\nSusunan wajib: logo di atas, model wanita di kiri, smartphone berisi bukti transfer di kanan, headline dan nominal besar di bagian tengah-bawah. Tambahkan empat panel keunggulan di bagian paling bawah: “AMAN TERPERCAYA”, “PROSES CEPAT”, “WIN RATE TINGGI”, dan “CUSTOMER SERVICE 24 JAM”. Jangan menampilkan nama pasaran, angka kemenangan, logo tambahan, watermark, atau orang lain.${endings}`;
-    if (kind === "syair") return `${common}\n\nTema utama: ${form.tema}. Buat postingan syair misterius, elegan, dan berkelas untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Gunakan headline “${form.headline}”. Sediakan panel syair utama dengan ruang teks yang lega, ornamen tematik, dan nuansa magis, tetapi teks tetap menjadi fokus.${endings}`;
+    if (kind === "syair") return `${common}\n\nBuat poster tabel syair premium yang susunan informasinya mengikuti contoh referensi. Poster untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}, dengan judul utama besar “${form.judulSyair}”. Gunakan tema visual ${form.tema}, tetapi seluruh angka dan teks di bawah harus dipertahankan tepat tanpa diganti, ditambah, dikurangi, atau diacak.\n\nDATA WAJIB:\n- BB 2D, tampilkan vertikal di panel kiri: ${form.bb2d}\n- Angka arah kompas di panel tengah: UTARA/N = ${form.arahUtara}, TIMUR/E = ${form.arahTimur}, SELATAN/S = ${form.arahSelatan}, BARAT/W = ${form.arahBarat}\n- BBFS, tampilkan vertikal di panel kanan: ${form.bbfs}\n- SHIO: ${form.shio}\n- COLOK BEBAS: ${form.colokBebas}\n- TOP 4D, tampilkan sebagai tiga kombinasi terpisah: ${form.top4d}\n\nISI SYAIR WAJIB:\n${form.isiSyair}\n\nSUSUNAN DESAIN WAJIB: header judul di atas; tanggal tepat di bawah judul; panel BB 2D di sisi kiri; kompas N-E-S-W dengan angka masing-masing di tengah; panel BBFS dan ilustrasi shio ${form.shio} di sisi kanan; kotak isi syair di tengah-bawah; lalu baris footer berisi SHIO, COLOK BEBAS, dan TOP 4D. Setiap panel harus memiliki garis pembatas tegas, hierarchy rapi, dan seluruh angka sangat mudah dibaca. Jangan menukar posisi, mengubah angka, membuat angka tambahan, atau mengganti nama shio.${endings}`;
     if (kind === "prediksi") return `${common}\n\nBuat poster dengan headline “${form.headline}” untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Angka utama “${form.angka}” harus sangat besar, jelas, berjajar rapi, memiliki efek 3D glossy dan glow lembut. Gunakan tema ${form.tema}. Tambahkan panel informasi yang bersih dan hierarchy visual yang kuat.${endings}`;
     return `${common}\n\nBuat poster pengumuman dengan headline “${form.headline}” untuk ${form.pasaran}, tanggal ${form.tanggal}. Tampilkan jadwal lama “${form.jadwalLama}” dengan penanda lama, panah perubahan yang jelas, lalu jadwal baru “${form.jadwalBaru}” sebagai fokus terbesar. Suasana resmi, informatif, mendesak tetapi tetap elegan.${endings}`;
   }, [kind, form]);
@@ -318,10 +324,25 @@ export default function Home() {
           <section className="panel formPanel">
             <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm({ ...initial, tanggal: getAutomaticDate() })}>Reset</button></div>
             {kind === "kemenangan" && <div className="referenceGuide"><b>3 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><span><i>3</i> Bukti transfer</span><small>Unggah ketiganya bersama prompt hasil generator.</small></div>}
+            {kind === "syair" && <div className="syairGuide"><b>FORMAT SYAIR LENGKAP</b><span>BB 2D</span><span>Kompas N–E–S–W</span><span>BBFS</span><span>SHIO</span><span>COLOK BEBAS</span><span>TOP 4D</span><small>Semua data akan dimasukkan tepat ke prompt tanpa diacak.</small></div>}
             <div className="formGrid">
               <Field label="Nama Brand" value={form.brand} onChange={update("brand")} />
               {kind !== "kemenangan" && <Field label="Nama Pasaran" value={form.pasaran} onChange={update("pasaran")} />}
               <Field label="Tanggal Posting (Otomatis)" value={form.tanggal} onChange={update("tanggal")} readOnly />
+              {kind === "syair" && <>
+                <Field label="Judul Syair" value={form.judulSyair} onChange={update("judulSyair")} />
+                <Field label="BB 2D (pisahkan dengan koma)" value={form.bb2d} onChange={update("bb2d")} placeholder="39, 26, 74, 57" />
+                <div className="wide syairSectionTitle">ANGKA ARAH KOMPAS</div>
+                <Field label="Utara / N" value={form.arahUtara} onChange={update("arahUtara")} />
+                <Field label="Timur / E" value={form.arahTimur} onChange={update("arahTimur")} />
+                <Field label="Selatan / S" value={form.arahSelatan} onChange={update("arahSelatan")} />
+                <Field label="Barat / W" value={form.arahBarat} onChange={update("arahBarat")} />
+                <Field label="BBFS" value={form.bbfs} onChange={update("bbfs")} placeholder="0, 2" />
+                <Field label="Shio" value={form.shio} onChange={update("shio")} placeholder="KELINCI" />
+                <Field label="Colok Bebas" value={form.colokBebas} onChange={update("colokBebas")} placeholder="4, 1" />
+                <Field label="TOP 4D (3 kombinasi)" value={form.top4d} onChange={update("top4d")} placeholder="1507, 1861, 3016" />
+                <div className="wide"><Field label="Isi Syair" value={form.isiSyair} onChange={update("isiSyair")} area /></div>
+              </>}
               {kind === "kemenangan" && <><Field label="Headline" value={form.headline} onChange={update("headline")} /><Field label="Nominal Kemenangan" value={form.nominal} onChange={update("nominal")} /></>}
               {kind === "prediksi" && <Field label="Angka Prediksi" value={form.angka} onChange={update("angka")} />}
               {kind === "jadwal" && <><Field label="Jadwal Lama" value={form.jadwalLama} onChange={update("jadwalLama")} /><Field label="Jadwal Baru" value={form.jadwalBaru} onChange={update("jadwalBaru")} /></>}
