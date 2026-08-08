@@ -11,6 +11,8 @@ type FormState = {
   catatan: string; judulSyair: string; bb2d: string; arahUtara: string;
   arahTimur: string; arahSelatan: string; arahBarat: string; bbfs: string;
   shio: string; colokBebas: string; top4d: string; isiSyair: string;
+  predBbfs: string; predAngkaMain: string; pred4d: string; pred3d: string;
+  pred2d: string; predColok2d: string; predColokBebas: string; predShio: string;
 };
 
 const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
@@ -57,6 +59,9 @@ const initial: FormState = {
   arahTimur: "8", arahSelatan: "7", arahBarat: "3", bbfs: "0, 2",
   shio: "KELINCI", colokBebas: "4, 1", top4d: "1507, 1861, 3016",
   isiSyair: "Kabut tipis turun perlahan\nSuara angin membawa pesan\nPilih angka penuh keyakinan\nSemoga hasil jadi harapan",
+  predBbfs: "718537", predAngkaMain: "28585", pred4d: "9600, 6003, 6587, 6531",
+  pred3d: "553, 261, 460", pred2d: "10, 82", predColok2d: "28, 42, 90",
+  predColokBebas: "2, 1", predShio: "ULAR",
 };
 
 const themeBank = [
@@ -216,7 +221,7 @@ export default function Home() {
     const endings = `\n\nKetentuan: ${form.catatan} Logo ${form.brand} harus terlihat jelas dan eksklusif. Jangan menambah logo, watermark, atau nama brand lain.`;
     if (kind === "kemenangan") return `${common}\n\nGunakan tepat tiga gambar referensi yang saya unggah:\n1. GAMBAR 1 — FOTO WANITA: jadikan sebagai model utama di sisi kiri. Pertahankan kemiripan wajah, bentuk rambut, warna kulit, dan pakaian dari foto asli. Jangan mengganti identitas, jangan membuat wajah baru, dan jangan menambahkan orang lain. Tampilkan setengah badan atau tiga perempat badan dengan pose natural menghadap kamera.\n2. GAMBAR 2 — LOGO SITUS: gunakan logo asli tanpa mengganti tulisan, bentuk, proporsi, atau warna. Letakkan logo secara besar dan jelas di bagian atas poster dengan ruang aman di sekelilingnya. Jangan membuat ulang logo menggunakan teks AI.\n3. GAMBAR 3 — BUKTI TRANSFER: masukkan gambar bukti transfer asli ke dalam layar smartphone premium berukuran besar di sisi kanan. Pertahankan susunan, nominal, tanggal, jam, dan status transaksi dari gambar asli. Jangan mengarang data transaksi. Blur hanya nama bank, nomor rekening, nama pengirim, dan nama penerima untuk privasi; nominal dan status transaksi harus tetap terbaca.\n\nBuat poster bukti kemenangan sederhana tetapi mewah dengan tema visual ${form.tema}. Gunakan headline besar “${form.headline}” dan tampilkan nominal “${form.nominal}” sebagai fokus utama dalam tipografi 3D gold yang sangat menonjol. Cantumkan tanggal posting “${form.tanggal}”. Tambahkan koin emas beterbangan, berlian emerald, partikel cahaya, serta efek kemenangan premium yang menghubungkan model dan smartphone tanpa membuat desain terlalu ramai.\n\nSusunan wajib: logo di atas, model wanita di kiri, smartphone berisi bukti transfer di kanan, headline dan nominal besar di bagian tengah-bawah. Tambahkan empat panel keunggulan di bagian paling bawah: “AMAN TERPERCAYA”, “PROSES CEPAT”, “WIN RATE TINGGI”, dan “CUSTOMER SERVICE 24 JAM”. Jangan menampilkan nama pasaran, angka kemenangan, logo tambahan, watermark, atau orang lain.${endings}`;
     if (kind === "syair") return `${common}\n\nBuat poster tabel syair premium yang susunan informasinya mengikuti contoh referensi. Poster untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}, dengan judul utama besar “${form.judulSyair}”. Gunakan tema visual ${form.tema}, tetapi seluruh angka dan teks di bawah harus dipertahankan tepat tanpa diganti, ditambah, dikurangi, atau diacak.\n\nDATA WAJIB:\n- BB 2D, tampilkan vertikal di panel kiri: ${form.bb2d}\n- Angka arah kompas di panel tengah: UTARA/N = ${form.arahUtara}, TIMUR/E = ${form.arahTimur}, SELATAN/S = ${form.arahSelatan}, BARAT/W = ${form.arahBarat}\n- BBFS, tampilkan vertikal di panel kanan: ${form.bbfs}\n- SHIO: ${form.shio}\n- COLOK BEBAS: ${form.colokBebas}\n- TOP 4D, tampilkan sebagai tiga kombinasi terpisah: ${form.top4d}\n\nISI SYAIR WAJIB:\n${form.isiSyair}\n\nSUSUNAN DESAIN WAJIB: header judul di atas; tanggal tepat di bawah judul; panel BB 2D di sisi kiri; kompas N-E-S-W dengan angka masing-masing di tengah; panel BBFS dan ilustrasi shio ${form.shio} di sisi kanan; kotak isi syair di tengah-bawah; lalu baris footer berisi SHIO, COLOK BEBAS, dan TOP 4D. Setiap panel harus memiliki garis pembatas tegas, hierarchy rapi, dan seluruh angka sangat mudah dibaca. Jangan menukar posisi, mengubah angka, membuat angka tambahan, atau mengganti nama shio.${endings}`;
-    if (kind === "prediksi") return `${common}\n\nBuat poster dengan headline “${form.headline}” untuk pasaran ${form.pasaran}, tanggal ${form.tanggal}. Angka utama “${form.angka}” harus sangat besar, jelas, berjajar rapi, memiliki efek 3D glossy dan glow lembut. Gunakan tema ${form.tema}. Tambahkan panel informasi yang bersih dan hierarchy visual yang kuat.${endings}`;
+    if (kind === "prediksi") return `${common}\n\nGunakan tepat dua gambar referensi yang saya unggah:\n1. GAMBAR 1 — FOTO WANITA: jadikan model utama di sisi kanan poster. Pertahankan kemiripan wajah, rambut, warna kulit, dan pakaian dari foto asli. Jangan mengganti identitas dan jangan menambahkan orang lain.\n2. GAMBAR 2 — LOGO SITUS: gunakan logo situs asli secara besar dan jelas di bagian kiri atas. Jangan mengubah tulisan, bentuk, proporsi, atau warna logo.\n\nCari logo pasaran “${form.pasaran}” melalui Google berdasarkan nama pasaran tersebut, lalu gunakan logo pasaran yang paling resmi dan sesuai. Jika fitur pencarian web tidak tersedia, tampilkan nama pasaran “${form.pasaran}” sebagai logotype premium tanpa menggunakan logo pasaran lain.\n\nBuat poster ANGKA PREDIKSI premium vertikal 4:5 seperti referensi, tanggal ${form.tanggal}. Judul besar wajib “ANGKA PREDIKSI” dan subjudul “${form.pasaran}”. Susun model wanita di kanan, logo situs di kiri atas, tanggal dan logo pasaran di bagian kiri-tengah, serta tabel angka prediksi di kiri-bawah.\n\nDATA ANGKA WAJIB—salin tepat tanpa mengubah, menambah, mengurangi, atau mengacak:\n- BBFS: ${form.predBbfs}\n- ANGKA MAIN: ${form.predAngkaMain}\n- 4D: ${form.pred4d}\n- 3D: ${form.pred3d}\n- 2D: ${form.pred2d}\n- COLOK BEBAS 2D: ${form.predColok2d}\n- COLOK BEBAS: ${form.predColokBebas}\n- SHIO: ${form.predShio}\n\nGunakan tabel berbingkai emas dengan label rata kiri dan angka rata kanan. Tambahkan bola angka dekoratif, koin emas, cahaya kota malam, dan panel “PREDIKSI AKURAT PALING AMAN” tanpa menutupi tabel. Footer dapat berisi PASARAN RESMI, BONUS MEMBER AKTIF, PROSES SUPER CEPAT, dan JACKPOT SIAP DIBAYAR. Semua angka wajib tajam dan mudah dibaca.${endings}`;
     return `${common}\n\nBuat poster pengumuman dengan headline “${form.headline}” untuk ${form.pasaran}, tanggal ${form.tanggal}. Tampilkan jadwal lama “${form.jadwalLama}” dengan penanda lama, panah perubahan yang jelas, lalu jadwal baru “${form.jadwalBaru}” sebagai fokus terbesar. Suasana resmi, informatif, mendesak tetapi tetap elegan.${endings}`;
   }, [kind, form]);
 
@@ -256,6 +261,17 @@ export default function Home() {
         gaya: pickDifferent(styleBank, old.gaya),
         headline: pickDifferent(headlines[kind], old.headline),
         catatan: pickDifferent(noteBank, old.catatan),
+      };
+      if (kind === "prediksi") return {
+        ...generated,
+        predBbfs: randomUniqueNumbers(6, 10, 1).join(""),
+        predAngkaMain: randomUniqueNumbers(5, 10, 1).join(""),
+        pred4d: randomUniqueNumbers(4, 10_000, 4).join(", "),
+        pred3d: randomUniqueNumbers(3, 1_000, 3).join(", "),
+        pred2d: randomUniqueNumbers(2, 100, 2).join(", "),
+        predColok2d: randomUniqueNumbers(3, 100, 2).join(", "),
+        predColokBebas: randomUniqueNumbers(2, 10, 1).join(", "),
+        predShio: pickDifferent(shioBank, old.predShio),
       };
       if (kind !== "syair") return generated;
 
@@ -352,9 +368,10 @@ export default function Home() {
           <section className="panel formPanel">
             <div className="panelHead"><div><span>01</span><h2>Detail Konten</h2></div><button className="ghost" onClick={() => setForm({ ...initial, tanggal: getAutomaticDate() })}>Reset</button></div>
             {kind === "kemenangan" && <div className="referenceGuide"><b>3 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><span><i>3</i> Bukti transfer</span><small>Unggah ketiganya bersama prompt hasil generator.</small></div>}
+            {kind === "prediksi" && <div className="referenceGuide predictionGuide"><b>2 GAMBAR REFERENSI UNTUK AI</b><span><i>1</i> Foto wanita</span><span><i>2</i> Logo situs</span><small>Logo pasaran akan diminta berdasarkan nama pasaran yang Anda isi.</small></div>}
             {kind === "syair" && <div className="syairGuide"><b>FORMAT SYAIR LENGKAP</b><span>BB 2D</span><span>Kompas N–E–S–W</span><span>BBFS</span><span>SHIO</span><span>COLOK BEBAS</span><span>TOP 4D</span><small>Tekan Generate Prompt untuk mendapatkan angka dan shio baru secara otomatis.</small></div>}
             <div className="formGrid">
-              <Field label="Nama Brand" value={form.brand} onChange={update("brand")} />
+              {kind !== "prediksi" && <Field label="Nama Brand" value={form.brand} onChange={update("brand")} />}
               {kind !== "kemenangan" && <Field label="Nama Pasaran" value={form.pasaran} onChange={update("pasaran")} />}
               <Field label="Tanggal Posting (Otomatis)" value={form.tanggal} onChange={update("tanggal")} readOnly />
               {kind === "syair" && <>
@@ -372,13 +389,25 @@ export default function Home() {
                 <div className="wide"><Field label="Isi Syair" value={form.isiSyair} onChange={update("isiSyair")} area /></div>
               </>}
               {kind === "kemenangan" && <><Field label="Headline" value={form.headline} onChange={update("headline")} /><Field label="Nominal Kemenangan" value={form.nominal} onChange={update("nominal")} /></>}
-              {kind === "prediksi" && <Field label="Angka Prediksi" value={form.angka} onChange={update("angka")} />}
+              {kind === "prediksi" && <>
+                <div className="wide predictionAutoTitle">ANGKA PREDIKSI OTOMATIS</div>
+                <Field label="BBFS" value={form.predBbfs} onChange={update("predBbfs")} readOnly />
+                <Field label="Angka Main" value={form.predAngkaMain} onChange={update("predAngkaMain")} readOnly />
+                <Field label="4D" value={form.pred4d} onChange={update("pred4d")} readOnly />
+                <Field label="3D" value={form.pred3d} onChange={update("pred3d")} readOnly />
+                <Field label="2D" value={form.pred2d} onChange={update("pred2d")} readOnly />
+                <Field label="Colok Bebas 2D" value={form.predColok2d} onChange={update("predColok2d")} readOnly />
+                <Field label="Colok Bebas" value={form.predColokBebas} onChange={update("predColokBebas")} readOnly />
+                <Field label="Shio" value={form.predShio} onChange={update("predShio")} readOnly />
+              </>}
               {kind === "jadwal" && <><Field label="Jadwal Lama" value={form.jadwalLama} onChange={update("jadwalLama")} /><Field label="Jadwal Baru" value={form.jadwalBaru} onChange={update("jadwalBaru")} /></>}
-              {(kind === "kemenangan" || kind === "syair" || kind === "prediksi") && <Field label="Tema / Karakter Visual" value={form.tema} onChange={update("tema")} />}
-              <Field label="Palet Warna" value={form.warna} onChange={update("warna")} />
-              <Field label="Ukuran / Rasio" value={form.rasio} onChange={update("rasio")} />
-              <Field label="Gaya Desain" value={form.gaya} onChange={update("gaya")} />
-              <div className="wide"><Field label="Catatan Tambahan" value={form.catatan} onChange={update("catatan")} area /></div>
+              {(kind === "kemenangan" || kind === "syair") && <Field label="Tema / Karakter Visual" value={form.tema} onChange={update("tema")} />}
+              {kind !== "prediksi" && <>
+                <Field label="Palet Warna" value={form.warna} onChange={update("warna")} />
+                <Field label="Ukuran / Rasio" value={form.rasio} onChange={update("rasio")} />
+                <Field label="Gaya Desain" value={form.gaya} onChange={update("gaya")} />
+                <div className="wide"><Field label="Catatan Tambahan" value={form.catatan} onChange={update("catatan")} area /></div>
+              </>}
             </div>
           </section>
 
