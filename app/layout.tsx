@@ -1,41 +1,19 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "PromptGen — Dashboard Generator Prompt",
-  description: "Buat prompt postingan kemenangan, syair, prediksi, dan perubahan jadwal dalam hitungan detik.",
-  other: {
-    "codex-preview": "development",
-  },
+export const metadata = {
+  title: "PREMANKARO | DASHBOARD",
+  description: "Dashboard internal Preman Karo",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: [{ url: "/premankaro-favicon-v1.png", type: "image/png" }],
+    shortcut: "/premankaro-favicon-v1.png",
+    apple: "/premankaro-favicon-v1.png",
   },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="id">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
