@@ -10,5 +10,6 @@ config.d1_databases = [
 ];
 config.browser = { binding: "BROWSER" };
 config.triggers = { crons: ["0 2 * * *", "0 14 * * *"] };
+config.secrets = { required: ["SITE_CREDENTIAL_KEY"] };
 fs.writeFileSync(path, JSON.stringify(config));
 console.log("D1 DB, Browser Run BROWSER, dan Cron 09:00/21:00 WIB injected");

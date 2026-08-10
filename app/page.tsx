@@ -1114,7 +1114,7 @@ export default function Home() {
                                 : "ssViewport"
                             }
                           >
-                            {result?.id && (
+                            {result?.id && result.status === "safe" && (
                               <img
                                 src={`/api/site-monitor?image=${encodeURIComponent(result.id)}`}
                                 alt={`Screenshot ${category.name}`}

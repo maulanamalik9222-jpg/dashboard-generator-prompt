@@ -19,6 +19,8 @@ type CategoryInput = {
 const runtime = () => env as unknown as RuntimeEnv;
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "cache-control": "no-store" } });
+const delay = (milliseconds: number) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 function wibDay(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -190,21 +192,24 @@ async function attemptGenericLogin(
   if (!submitted) {
     await page.focus(passwordSelector);
     await page.keyboard.press("Enter");
-    await page.waitForTimeout(4_000);
+    await delay(4_000);
   }
   return { attempted: true, message: "Proses login otomatis dijalankan." };
 }
 
-async function captureCategory(category: any, shift: "pagi" | "malam") {
+async function captureCategory(
+  browser: any,
+  category: any,
+  shift: "pagi" | "malam",
+) {
   const db = runtime().DB;
   const day = wibDay();
   const checkedAt = Date.now();
   const id = crypto.randomUUID();
-  let browser: any;
+  let page: any;
   try {
     const url = normalizeUrl(String(category.url));
-    browser = await puppeteer.launch(runtime().BROWSER as any);
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 820, deviceScaleFactor: 1 });
     const response = await page.goto(url, {
       waitUntil: "networkidle2",
@@ -223,7 +228,7 @@ async function captureCategory(category: any, shift: "pagi" | "malam") {
         await page.goto(url, { waitUntil: "networkidle2", timeout: 25_000 });
       }
     }
-    await page.waitForTimeout(1_500);
+    await delay(1_500);
     const shot = (await page.screenshot({
       type: "jpeg",
       quality: 48,
@@ -309,8 +314,22 @@ async function captureCategory(category: any, shift: "pagi" | "malam") {
       checkedAt,
     };
   } finally {
-    if (browser) await browser.close().catch(() => undefined);
+    if (page) await page.close().catch(() => undefined);
   }
+}
+
+async function launchBrowserWithRetry() {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await puppeteer.launch(runtime().BROWSER as any);
+    } catch (error) {
+      lastError = error;
+      if (!String(error).includes("429") || attempt === 2) throw error;
+      await delay((attempt + 1) * 5_000);
+    }
+  }
+  throw lastError;
 }
 
 async function runChecks(shift: "pagi" | "malam", categoryId?: string) {
@@ -329,9 +348,15 @@ async function runChecks(shift: "pagi" | "malam", categoryId?: string) {
       );
   const rows = await query.all<any>();
   const results = [];
-  for (const category of rows.results)
-    results.push(await captureCategory(category, shift));
-  return results;
+  if (!rows.results.length) return results;
+  const browser = await launchBrowserWithRetry();
+  try {
+    for (const category of rows.results)
+      results.push(await captureCategory(browser, category, shift));
+    return results;
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
 }
 
 async function authorized(request: Request) {
