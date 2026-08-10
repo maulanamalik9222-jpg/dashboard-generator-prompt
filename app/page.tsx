@@ -166,6 +166,7 @@ export default function Home() {
   const [rgbThree, setRgbThree] = useState("#39ff88");
   const [rgbSpeed, setRgbSpeed] = useState(12);
   const [rgbLoaded, setRgbLoaded] = useState(false);
+  const [displayMode, setDisplayMode] = useState<"dark" | "light">("dark");
   const [footballData, setFootballData] = useState<FootballData | null>(null);
   const [footballLoading, setFootballLoading] = useState(false);
   const [footballError, setFootballError] = useState("");
@@ -176,6 +177,8 @@ export default function Home() {
     const saved = localStorage.getItem("prompt-history");
     if (saved) setHistory(JSON.parse(saved));
     const savedRgb = localStorage.getItem("premankaro-rgb");
+    const savedMode = localStorage.getItem("premankaro-display-mode");
+    if (savedMode === "light" || savedMode === "dark") setDisplayMode(savedMode);
     if (savedRgb) {
       try {
         const rgb = JSON.parse(savedRgb);
@@ -214,6 +217,10 @@ export default function Home() {
     if (!rgbLoaded) return;
     localStorage.setItem("premankaro-rgb", JSON.stringify({ one: rgbOne, two: rgbTwo, three: rgbThree, speed: rgbSpeed }));
   }, [rgbLoaded, rgbOne, rgbTwo, rgbThree, rgbSpeed]);
+
+  useEffect(() => {
+    localStorage.setItem("premankaro-display-mode", displayMode);
+  }, [displayMode]);
 
   useEffect(() => {
     const syncClock = () => setUsdtDateTime(getAutomaticDateTime());
@@ -371,16 +378,20 @@ export default function Home() {
   } as React.CSSProperties;
 
   return (
-    <AuthGate><main className="shell" style={rgbStyle}>
+    <AuthGate><main className={displayMode === "light" ? "shell lightMode" : "shell darkMode"} style={rgbStyle}>
       <aside className="sidebar">
         <div className="brand">
+          <span className="logoOrbit orbitBack" />
           <img className="brandLogo" src="/logo-harimau-gorila-v2.png" alt="Logo Harimau dan Gorila" />
+          <span className="tigerEyes"><i /><i /></span>
+          <span className="logoOrbit orbitFront" />
         </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
       </aside>
 
       <section className="workspace">
+        <button className="modeToggle floatingModeToggle" onClick={() => setDisplayMode((mode) => mode === "dark" ? "light" : "dark")}>{displayMode === "dark" ? "☀ MODE CERAH" : "☾ MODE GELAP"}</button>
         <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="headerTools"><div className="status"><span /> Tersimpan lokal</div><button className="rgbToggle" onClick={() => setRgbOpen((open) => !open)}>◉ ATUR RGB</button>{rgbOpen && <div className="rgbPanel"><div className="rgbPanelHead"><b>WARNA TEKS RGB</b><button onClick={() => setRgbOpen(false)}>×</button></div><div className="rgbColors"><label><span>Warna 1</span><input type="color" value={rgbOne} onChange={(event) => setRgbOne(event.target.value)} /></label><label><span>Warna 2</span><input type="color" value={rgbTwo} onChange={(event) => setRgbTwo(event.target.value)} /></label><label><span>Warna 3</span><input type="color" value={rgbThree} onChange={(event) => setRgbThree(event.target.value)} /></label></div><label className="rgbSpeed"><span>Kecepatan: {rgbSpeed} detik</span><input type="range" min="5" max="30" step="1" value={rgbSpeed} onChange={(event) => setRgbSpeed(Number(event.target.value))} /></label><button className="rgbReset" onClick={() => { setRgbOne("#ff2442"); setRgbTwo("#f4c542"); setRgbThree("#39ff88"); setRgbSpeed(12); }}>Reset Warna</button></div>}</div></header>
 
         <div className={kind === "bola" ? "grid footballGrid" : kind === "validasi" ? "grid validationGrid" : kind === "usdt" || kind === "result" ? "grid usdtGrid" : "grid"}>
