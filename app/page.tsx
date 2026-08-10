@@ -380,11 +380,9 @@ export default function Home() {
   return (
     <AuthGate><main className={displayMode === "light" ? "shell lightMode" : "shell darkMode"} style={rgbStyle}>
       <aside className="sidebar">
-        <div className="brand">
-          <span className="logoOrbit orbitBack" />
-          <img className="brandLogo" src="/logo-harimau-gorila-v2.png" alt="Logo Harimau dan Gorila" />
-          <span className="tigerEyes"><i /><i /></span>
-          <span className="logoOrbit orbitFront" />
+        <div className="brand infinityBrand">
+          <span className="infinityAura" />
+          <img className="brandLogo infinityLogo" src="/logo-infinity-premium.jfif" alt="Logo Infinity Premium" />
         </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
