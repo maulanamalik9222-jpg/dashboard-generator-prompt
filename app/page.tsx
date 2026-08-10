@@ -378,7 +378,6 @@ export default function Home() {
         </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
-        <div className="sideNote"><b>Tips hasil terbaik</b><p>Isi data selengkap mungkin. Gunakan angka, tanggal, warna, dan ukuran yang spesifik.</p></div>
       </aside>
 
       <section className="workspace">
