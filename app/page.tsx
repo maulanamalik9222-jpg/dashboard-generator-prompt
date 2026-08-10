@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import AuthGate from "./auth-gate";
 
-type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi" | "usdt" | "result";
+type Kind = "kemenangan" | "syair" | "prediksi" | "jadwal" | "validasi" | "usdt" | "result" | "bola";
+type FootballMatch = { time: string; date: string; home: string; away: string; score: string };
+type FootballLeague = { name: string; matches: FootballMatch[] };
+type FootballData = { title: string; sourceUrl: string; leagues: FootballLeague[]; matchCount: number; leagueCount: number; fetchedAt: string; wpScript: string };
 type FormState = {
   brand: string; pasaran: string; tanggal: string; headline: string;
   nominal: string; angka: string; tema: string; warna: string;
@@ -23,6 +26,7 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
   { id: "validasi", label: "Validasi Dana", icon: "✓", hint: "Cocokkan nama penerima dana" },
   { id: "usdt", label: "Update USDT", icon: "₮", hint: "Buat informasi rate terbaru" },
   { id: "result", label: "Keterlambatan Result", icon: "!", hint: "Informasi status result pasaran" },
+  { id: "bola", label: "Prediksi Bola", icon: "⚽", hint: "Jadwal dan prediksi skor harian" },
 ];
 
 function getAutomaticDate() {
@@ -107,6 +111,7 @@ const headlines: Record<Kind, string[]> = {
   validasi: ["VALIDASI NAMA PENERIMA"],
   usdt: ["UPDATE RATE USDT"],
   result: ["INFORMASI RESULT PASARAN"],
+  bola: ["PREDIKSI BOLA HARI INI"],
 };
 
 const noteBank = [
@@ -161,6 +166,11 @@ export default function Home() {
   const [rgbThree, setRgbThree] = useState("#39ff88");
   const [rgbSpeed, setRgbSpeed] = useState(12);
   const [rgbLoaded, setRgbLoaded] = useState(false);
+  const [footballData, setFootballData] = useState<FootballData | null>(null);
+  const [footballLoading, setFootballLoading] = useState(false);
+  const [footballError, setFootballError] = useState("");
+  const [footballTheme, setFootballTheme] = useState<"blue" | "black">("blue");
+  const [footballCopied, setFootballCopied] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
@@ -177,6 +187,28 @@ export default function Home() {
     }
     setRgbLoaded(true);
   }, []);
+
+  const loadFootball = async (theme: "blue" | "black" = footballTheme) => {
+    setFootballLoading(true);
+    setFootballError("");
+    try {
+      const response = await fetch(`/api/football-predictions?theme=${theme}&refresh=${Date.now()}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Data prediksi belum tersedia.");
+      setFootballData(data);
+    } catch (error) {
+      setFootballError(error instanceof Error ? error.message : "Gagal mengambil prediksi bola.");
+    } finally {
+      setFootballLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (kind !== "bola") return;
+    loadFootball(footballTheme);
+    const timer = window.setInterval(() => loadFootball(footballTheme), 30 * 60 * 1_000);
+    return () => window.clearInterval(timer);
+  }, [kind, footballTheme]);
 
   useEffect(() => {
     if (!rgbLoaded) return;
@@ -280,6 +312,12 @@ export default function Home() {
     setResultCopied(type);
     window.setTimeout(() => setResultCopied(null), 1_600);
   };
+  const copyFootballScript = async () => {
+    if (!footballData?.wpScript) return;
+    await navigator.clipboard.writeText(footballData.wpScript);
+    setFootballCopied(true);
+    window.setTimeout(() => setFootballCopied(false), 1_800);
+  };
   const savePrompt = () => {
     const next = [prompt, ...history.filter((x) => x !== prompt)].slice(0, 8);
     setHistory(next); localStorage.setItem("prompt-history", JSON.stringify(next));
@@ -346,8 +384,21 @@ export default function Home() {
       <section className="workspace">
         <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="headerTools"><div className="status"><span /> Tersimpan lokal</div><button className="rgbToggle" onClick={() => setRgbOpen((open) => !open)}>◉ ATUR RGB</button>{rgbOpen && <div className="rgbPanel"><div className="rgbPanelHead"><b>WARNA TEKS RGB</b><button onClick={() => setRgbOpen(false)}>×</button></div><div className="rgbColors"><label><span>Warna 1</span><input type="color" value={rgbOne} onChange={(event) => setRgbOne(event.target.value)} /></label><label><span>Warna 2</span><input type="color" value={rgbTwo} onChange={(event) => setRgbTwo(event.target.value)} /></label><label><span>Warna 3</span><input type="color" value={rgbThree} onChange={(event) => setRgbThree(event.target.value)} /></label></div><label className="rgbSpeed"><span>Kecepatan: {rgbSpeed} detik</span><input type="range" min="5" max="30" step="1" value={rgbSpeed} onChange={(event) => setRgbSpeed(Number(event.target.value))} /></label><button className="rgbReset" onClick={() => { setRgbOne("#ff2442"); setRgbTwo("#f4c542"); setRgbThree("#39ff88"); setRgbSpeed(12); }}>Reset Warna</button></div>}</div></header>
 
-        <div className={kind === "validasi" ? "grid validationGrid" : kind === "usdt" || kind === "result" ? "grid usdtGrid" : "grid"}>
-          {kind === "validasi" ? <section className="panel validationPanel">
+        <div className={kind === "bola" ? "grid footballGrid" : kind === "validasi" ? "grid validationGrid" : kind === "usdt" || kind === "result" ? "grid usdtGrid" : "grid"}>
+          {kind === "bola" ? <section className="footballStudio">
+            <div className="panel footballControls">
+              <div className="footballSource"><small>LINK ACUAN PREDIKSI</small><a href={footballData?.sourceUrl || "https://jpkoloni4d.pagesco.de/prediksi-bola-10-11-agustus-2026"} target="_blank" rel="noreferrer">↗ BUKA LINK ACUAN</a><span>Dashboard mengecek data baru otomatis setiap 30 menit.</span></div>
+              <div className="footballThemePicker"><small>THEMA</small><div><button className={footballTheme === "black" ? "selected" : ""} onClick={() => setFootballTheme("black")}>THEMA BLACK</button><button className={footballTheme === "blue" ? "selected blue" : ""} onClick={() => setFootballTheme("blue")}>THEMA BLUE</button></div></div>
+              <div className="footballActions"><button onClick={() => loadFootball(footballTheme)} disabled={footballLoading}>⟳ {footballLoading ? "MEMUAT DATA..." : "REFRESH DATA"}</button><button className="copyWp" onClick={copyFootballScript} disabled={!footballData}>{footballCopied ? "✓ SCRIPT TERSALIN" : "▣ SALIN SCRIPT JADWAL"}</button></div>
+              {footballData && <div className="footballStats"><b>{footballData.matchCount} PERTANDINGAN</b><b>{footballData.leagueCount} LIGA</b><span>Update: {new Date(footballData.fetchedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</span></div>}
+            </div>
+            {footballError && <div className="footballError"><b>DATA BELUM DAPAT DIMUAT</b><span>{footballError}</span><button onClick={() => loadFootball(footballTheme)}>COBA LAGI</button></div>}
+            {footballLoading && !footballData && <div className="footballLoading">Mengambil seluruh prediksi dari sumber…</div>}
+            {footballData && <div className={footballTheme === "black" ? "footballBoard black" : "footballBoard blue"}>
+              <h1>{footballData.title}</h1><div className="footballNotice">SELAMAT DATANG DI PREDIKSI BOLA • SELALU UTAMAKAN PREDIKSI SENDIRI.</div>
+              {footballData.leagues.map((league) => <section className="footballLeague" key={league.name}><h2>{league.name}</h2><div className="footballTableHead"><span>TANGGAL / WAKTU</span><span>PERTANDINGAN</span><span>PREDIKSI SKOR</span></div>{league.matches.map((match, index) => <div className="footballRow" key={`${league.name}-${match.home}-${index}`}><time>{match.date} {match.time} WIB</time><div className="footballTeams"><b>{match.home}</b><i>VS</i><b>{match.away}</b></div><strong>{match.score}</strong></div>)}</section>)}
+            </div>}
+          </section> : kind === "validasi" ? <section className="panel validationPanel">
             <div className="panelHead"><div><span>01</span><h2>Pengecekan Validasi Dana</h2></div><button className="ghost" onClick={() => { setMaskedName(""); setOriginalName(""); setValidationReady(false); }}>Reset</button></div>
             <div className="validationIntro"><b>COCOKKAN NAMA SECARA OTOMATIS</b><p>Huruf <strong>X</strong> dianggap sebagai huruf yang disembunyikan. Spasi dan tanda baca tidak dihitung.</p></div>
             <div className="validationInputs">
