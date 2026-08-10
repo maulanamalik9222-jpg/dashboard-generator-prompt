@@ -74,6 +74,7 @@ export async function GET(request: Request) {
       const title = pageTitle.replace(/^Prediksi Bola/i, "JADWAL BOLA").toUpperCase();
       const matchCount = leagues.reduce((total, league) => total + league.matches.length, 0);
       const wpScript = makeWordPressScript(leagues, title, sourceUrl, requestedTheme)
+        .replace("🏆 WORLD CUP 2026 🏆", "🏆PREDIKSI BOLA TOGELUP🏆")
         .replace(/<a class="tu-source"[\s\S]*?<\/a>/i, "")
         .replace(/#TU_PRO_msml7o7z_dewxb \.tu-source\{[^}]*\}/i, "");
       return Response.json({ title, sourceUrl, leagues, matchCount, leagueCount: leagues.length, fetchedAt: new Date().toISOString(), wpScript });

@@ -406,7 +406,7 @@ export default function Home() {
             {footballLoading && !footballData && <div className="footballLoading">Mengambil seluruh prediksi dari sumber…</div>}
             {footballData && <div className={footballTheme === "black" ? "footballBoard footballWpPreview black" : "footballBoard footballWpPreview blue"}>
               <img className="footballMainLogo" src="https://cdn.areabermain.club/assets/cdn/az5/2026/05/29/20260529/891d078dfb7eafea9e076c4e6a0c8d44/togelup-togel-hijau-transparan-clean.png" alt="TOGELUP" />
-              <h1>🏆 WORLD CUP 2026 🏆</h1><div className="footballNotice">MATCH: {footballData.matchCount} • SEMUA LIGA • JADWAL TERUPDATE OTOMATIS</div>
+              <h1>🏆PREDIKSI BOLA TOGELUP🏆</h1><div className="footballNotice">MATCH: {footballData.matchCount} • SEMUA LIGA • JADWAL TERUPDATE OTOMATIS</div>
               {footballData.leagues.map((league) => <section className="footballLeague" key={league.name}><h2>🏆 {league.name} 🏆</h2>{league.matches.map((match, index) => <div className="footballMatchCard" key={`${league.name}-${match.home}-${index}`}><div className="footballClub left"><b>{match.home}</b><span>{match.home.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}</span></div><div className="footballPrediction"><small>PREDICTION</small><strong>{match.score.replace(/\s+/g, "")}</strong><time>{match.date} {match.time} WIB</time></div><div className="footballClub right"><span>{match.away.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}</span><b>{match.away}</b></div></div>)}</section>)}
             </div>}
           </section> : kind === "validasi" ? <section className="panel validationPanel">
