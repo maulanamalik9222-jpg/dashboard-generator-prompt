@@ -378,11 +378,14 @@ export default function Home() {
   } as React.CSSProperties;
 
   return (
-    <AuthGate><main className={displayMode === "light" ? "shell lightMode" : "shell darkMode"} style={rgbStyle}>
+    <AuthGate><main className={displayMode === "light" ? "shell techFont lightMode" : "shell techFont darkMode"} style={rgbStyle}>
       <aside className="sidebar">
-        <div className="brand infinityBrand">
-          <span className="infinityAura" />
-          <img className="brandLogo infinityLogo infinityGifLogo" src="/logo-infinity-4d.gif" alt="Logo Infinity 4D Bergerak" />
+        <div className="brand mBrand">
+          <span className="mSmoke smokeOne" />
+          <span className="mSmoke smokeTwo" />
+          <span className="mHalo" />
+          <img className="brandLogo mLogo" src="/logo-m-4d.gif" alt="Logo M 4D Bergerak" />
+          <span className="mSpark sparkOne" /><span className="mSpark sparkTwo" /><span className="mSpark sparkThree" />
         </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
