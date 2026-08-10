@@ -73,7 +73,10 @@ export async function GET(request: Request) {
       const pageTitle = decode(html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || "Prediksi Bola").replace(/\s+Terbaru$/i, "");
       const title = pageTitle.replace(/^Prediksi Bola/i, "JADWAL BOLA").toUpperCase();
       const matchCount = leagues.reduce((total, league) => total + league.matches.length, 0);
-      return Response.json({ title, sourceUrl, leagues, matchCount, leagueCount: leagues.length, fetchedAt: new Date().toISOString(), wpScript: makeWordPressScript(leagues, title, sourceUrl, requestedTheme) });
+      const wpScript = makeWordPressScript(leagues, title, sourceUrl, requestedTheme)
+        .replace(/<a class="tu-source"[\s\S]*?<\/a>/i, "")
+        .replace(/#TU_PRO_msml7o7z_dewxb \.tu-source\{[^}]*\}/i, "");
+      return Response.json({ title, sourceUrl, leagues, matchCount, leagueCount: leagues.length, fetchedAt: new Date().toISOString(), wpScript });
     } catch (error) { lastError = error instanceof Error ? error.message : "Gagal membaca sumber."; }
   }
   return Response.json({ error: lastError, sourceUrl: FIXED_SOURCE }, { status: 502 });
