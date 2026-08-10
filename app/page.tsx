@@ -466,7 +466,8 @@ export default function Home() {
             <section className="panel monitorTop">
               <div className="monitorSummary">
                 <div className="problem"><small>BERMASALAH</small><strong>{monitorResults.filter((item) => item.status === "problem" || item.nawala === "blocked").length}</strong></div>
-                <div className="safe"><small>AMAN</small><strong>{monitorResults.filter((item) => item.status === "safe" && item.nawala !== "blocked").length}</strong></div>
+                <div className="safe"><small>AMAN TERVERIFIKASI</small><strong>{monitorResults.filter((item) => item.status === "safe" && item.nawala === "safe").length}</strong></div>
+                <div className="unknown"><small>NAWALA BELUM TERCEK</small><strong>{monitorResults.filter((item) => item.nawala === "unknown").length}</strong></div>
                 <div><small>TOTAL LINK</small><strong>{monitorResults.length}</strong></div>
               </div>
               <div className="monitorActions"><button className="checkAll" onClick={() => checkLinks()} disabled={monitorChecking}>{monitorChecking ? "MEMERIKSA..." : "CEK SEMUA"}</button><button onClick={() => setMonitorAuto(false)}>CANCEL</button><button onClick={() => setMonitorResults([])}>HAPUS HASIL</button></div>
@@ -476,8 +477,8 @@ export default function Home() {
             <section className="panel monitorInputPanel"><div className="panelHead"><div><span>01</span><h2>Atur Daftar Link</h2></div></div><div className="monitorInput"><Field label="Tempel Link — satu link per baris" value={monitorRaw} onChange={setMonitorRaw} placeholder={"https://contoh1.com\nhttps://contoh2.com"} area /><button onClick={() => checkLinks()} disabled={monitorChecking}>⌕ PROSES CEK DATA</button></div></section>
             {monitorError && <div className="monitorError">{monitorError}</div>}
             <section className="monitorCards">
-              {monitorResults.map((item) => <article key={item.url} className={item.status === "safe" && item.nawala !== "blocked" ? "monitorCard safe" : "monitorCard problem"}>
-                <div className="monitorCardHead"><span>{item.nawala === "blocked" ? "NAWALA / DIBLOKIR" : item.status === "safe" ? "AMAN" : "TIDAK BISA DIAKSES"}</span><small>{item.httpStatus ? `HTTP ${item.httpStatus}` : "NO RESPONSE"}</small></div>
+              {monitorResults.map((item) => <article key={item.url} className={item.nawala === "blocked" || item.status === "problem" ? "monitorCard problem" : item.nawala === "safe" ? "monitorCard safe" : "monitorCard unknown"}>
+                <div className="monitorCardHead"><span>{item.nawala === "blocked" ? "NAWALA / DIBLOKIR" : item.status === "problem" ? "TIDAK BISA DIAKSES" : item.nawala === "safe" ? "AMAN TERVERIFIKASI" : "SITUS AKTIF • NAWALA GAGAL"}</span><small>{item.httpStatus ? `HTTP ${item.httpStatus}` : "NO RESPONSE"}</small></div>
                 <h3>{item.hostname}</h3><a href={item.finalUrl || item.url} target="_blank" rel="noreferrer">{item.url}</a>
                 <div className="monitorFacts"><span>Respons: <b>{item.latency} ms</b></span><span>NAWALA: <b>{item.nawala === "blocked" ? "TERBLOKIR" : item.nawala === "safe" ? "AMAN" : "BELUM TERHUBUNG"}</b></span></div>
                 <p>{item.message}</p><time>{new Date(item.checkedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</time>
