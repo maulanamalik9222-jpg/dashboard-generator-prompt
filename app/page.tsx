@@ -8,6 +8,7 @@ type FootballMatch = { time: string; date: string; home: string; away: string; s
 type FootballLeague = { name: string; matches: FootballMatch[] };
 type FootballData = { title: string; sourceUrl: string; leagues: FootballLeague[]; matchCount: number; leagueCount: number; fetchedAt: string; wpScript: string };
 type LinkCheckResult = { url: string; hostname: string; status: "safe" | "problem"; httpStatus: number | null; latency: number; finalUrl: string; checkedAt: string; message: string; nawala: "safe" | "blocked" | "unknown" };
+type MonitorCategory = { id: string; name: string; url: string; login: boolean; active: boolean };
 type FormState = {
   brand: string; pasaran: string; tanggal: string; headline: string;
   nominal: string; angka: string; tema: string; warna: string;
@@ -28,7 +29,7 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
   { id: "usdt", label: "Update USDT", icon: "₮", hint: "Buat informasi rate terbaru" },
   { id: "result", label: "Keterlambatan Result", icon: "!", hint: "Informasi status result pasaran" },
   { id: "bola", label: "Prediksi Bola", icon: "⚽", hint: "Jadwal dan prediksi skor harian" },
-  { id: "monitor", label: "Cek Link & Nawala", icon: "🛡", hint: "Pantau kondisi seluruh link" },
+  { id: "monitor", label: "Cek Link Situs Otomatis", icon: "▣", hint: "Pengecekan kategori dua shift" },
 ];
 
 function getAutomaticDate() {
@@ -114,6 +115,7 @@ const headlines: Record<Kind, string[]> = {
   usdt: ["UPDATE RATE USDT"],
   result: ["INFORMASI RESULT PASARAN"],
   bola: ["PREDIKSI BOLA HARI INI"],
+  monitor: ["CEK LINK SITUS OTOMATIS"],
 };
 
 const noteBank = [
@@ -181,6 +183,17 @@ export default function Home() {
   const [monitorChecking, setMonitorChecking] = useState(false);
   const [monitorError, setMonitorError] = useState("");
   const [monitorLastChecked, setMonitorLastChecked] = useState("");
+  const [monitorShift, setMonitorShift] = useState<"pagi" | "malam">("pagi");
+  const [monitorCategories, setMonitorCategories] = useState<MonitorCategory[]>([]);
+  const [monitorCategoryName, setMonitorCategoryName] = useState("");
+  const [monitorCategoryUrl, setMonitorCategoryUrl] = useState("");
+  const [monitorSettingsOpen, setMonitorSettingsOpen] = useState(false);
+  const [monitorLoginOpen, setMonitorLoginOpen] = useState(false);
+  const [monitorUsername, setMonitorUsername] = useState("");
+  const [monitorPassword, setMonitorPassword] = useState("");
+  const [monitorLoginReady, setMonitorLoginReady] = useState(false);
+  const [monitorSearch, setMonitorSearch] = useState("");
+  const [monitorLoaded, setMonitorLoaded] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
@@ -203,6 +216,7 @@ export default function Home() {
         const monitor = JSON.parse(savedMonitor);
         if (typeof monitor.raw === "string") setMonitorRaw(monitor.raw);
         if (Number(monitor.interval) >= 1) setMonitorInterval(Number(monitor.interval));
+        if (Array.isArray(monitor.categories)) setMonitorCategories(monitor.categories);
         if (monitor.day === getAutomaticDate() && Array.isArray(monitor.results)) {
           setMonitorResults(monitor.results);
           setMonitorLastChecked(String(monitor.lastChecked || ""));
@@ -210,10 +224,11 @@ export default function Home() {
       } catch {}
     }
     setRgbLoaded(true);
+    setMonitorLoaded(true);
   }, []);
 
   const checkLinks = async (onlyUrl?: string) => {
-    const urls = onlyUrl ? [onlyUrl] : monitorRaw.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean);
+    const urls = onlyUrl ? [onlyUrl] : monitorCategories.filter((item) => item.active && item.url.trim()).map((item) => item.url.trim());
     if (!urls.length) { setMonitorError("Masukkan minimal satu link."); return; }
     setMonitorChecking(true);
     setMonitorError("");
@@ -226,21 +241,22 @@ export default function Home() {
       const checkedAt = new Date().toISOString();
       setMonitorResults(next);
       setMonitorLastChecked(checkedAt);
-      localStorage.setItem("premankaro-link-monitor", JSON.stringify({ raw: monitorRaw, interval: monitorInterval, day: getAutomaticDate(), results: next, lastChecked: checkedAt }));
+      localStorage.setItem("premankaro-link-monitor", JSON.stringify({ raw: monitorRaw, interval: monitorInterval, categories: monitorCategories, day: getAutomaticDate(), results: next, lastChecked: checkedAt }));
     } catch (error) {
       setMonitorError(error instanceof Error ? error.message : "Pengecekan link gagal.");
     } finally { setMonitorChecking(false); }
   };
 
   useEffect(() => {
-    localStorage.setItem("premankaro-link-monitor", JSON.stringify({ raw: monitorRaw, interval: monitorInterval, day: getAutomaticDate(), results: monitorResults, lastChecked: monitorLastChecked }));
-  }, [monitorRaw, monitorInterval]);
+    if (!monitorLoaded) return;
+    localStorage.setItem("premankaro-link-monitor", JSON.stringify({ raw: monitorRaw, interval: monitorInterval, categories: monitorCategories, day: getAutomaticDate(), results: monitorResults, lastChecked: monitorLastChecked }));
+  }, [monitorLoaded, monitorRaw, monitorInterval, monitorCategories, monitorResults, monitorLastChecked]);
 
   useEffect(() => {
     if (!monitorAuto || kind !== "monitor") return;
     const timer = window.setInterval(() => checkLinks(), Math.max(1, monitorInterval) * 60_000);
     return () => window.clearInterval(timer);
-  }, [monitorAuto, monitorInterval, kind, monitorRaw, monitorResults]);
+  }, [monitorAuto, monitorInterval, kind, monitorCategories]);
 
   useEffect(() => {
     const clearOldDailyResults = () => {
@@ -249,14 +265,14 @@ export default function Home() {
         if (saved.day && saved.day !== getAutomaticDate()) {
           setMonitorResults([]);
           setMonitorLastChecked("");
-          localStorage.setItem("premankaro-link-monitor", JSON.stringify({ raw: monitorRaw, interval: monitorInterval, day: getAutomaticDate(), results: [], lastChecked: "" }));
+          localStorage.setItem("premankaro-link-monitor", JSON.stringify({ raw: monitorRaw, interval: monitorInterval, categories: monitorCategories, day: getAutomaticDate(), results: [], lastChecked: "" }));
         }
       } catch {}
     };
     clearOldDailyResults();
     const timer = window.setInterval(clearOldDailyResults, 60_000);
     return () => window.clearInterval(timer);
-  }, [monitorRaw, monitorInterval]);
+  }, [monitorRaw, monitorInterval, monitorCategories]);
 
   const loadFootball = async (theme: "blue" | "black" = footballTheme) => {
     setFootballLoading(true);
@@ -462,30 +478,22 @@ export default function Home() {
         <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="headerTools"><div className="status"><span /> ONLINE</div><button className="modeToggle" onClick={() => setDisplayMode((mode) => mode === "dark" ? "light" : "dark")}>{displayMode === "dark" ? "☀ MODE CERAH" : "☾ MODE GELAP"}</button><button className="rgbToggle" onClick={() => setRgbOpen((open) => !open)}>◉ ATUR RGB</button>{rgbOpen && <div className="rgbPanel"><div className="rgbPanelHead"><b>WARNA TEKS RGB</b><button onClick={() => setRgbOpen(false)}>×</button></div><div className="rgbColors"><label><span>Warna 1</span><input type="color" value={rgbOne} onChange={(event) => setRgbOne(event.target.value)} /></label><label><span>Warna 2</span><input type="color" value={rgbTwo} onChange={(event) => setRgbTwo(event.target.value)} /></label><label><span>Warna 3</span><input type="color" value={rgbThree} onChange={(event) => setRgbThree(event.target.value)} /></label></div><label className="rgbSpeed"><span>Kecepatan: {rgbSpeed} detik</span><input type="range" min="5" max="30" step="1" value={rgbSpeed} onChange={(event) => setRgbSpeed(Number(event.target.value))} /></label><button className="rgbReset" onClick={() => { setRgbOne("#ff2442"); setRgbTwo("#f4c542"); setRgbThree("#39ff88"); setRgbSpeed(12); }}>Reset Warna</button></div>}</div></header>
 
         <div className={kind === "monitor" ? "grid monitorGrid lexendContent" : kind === "bola" ? "grid footballGrid lexendContent" : kind === "validasi" ? "grid validationGrid lexendContent" : kind === "usdt" || kind === "result" ? "grid usdtGrid lexendContent" : "grid lexendContent"}>
-          {kind === "monitor" ? <section className="linkMonitorStudio">
-            <section className="panel monitorTop">
-              <div className="monitorSummary">
-                <div className="problem"><small>BERMASALAH</small><strong>{monitorResults.filter((item) => item.status === "problem" || item.nawala === "blocked").length}</strong></div>
-                <div className="safe"><small>AMAN TERVERIFIKASI</small><strong>{monitorResults.filter((item) => item.status === "safe" && item.nawala === "safe").length}</strong></div>
-                <div className="unknown"><small>NAWALA BELUM TERCEK</small><strong>{monitorResults.filter((item) => item.nawala === "unknown").length}</strong></div>
-                <div><small>TOTAL LINK</small><strong>{monitorResults.length}</strong></div>
-              </div>
-              <div className="monitorActions"><button className="checkAll" onClick={() => checkLinks()} disabled={monitorChecking}>{monitorChecking ? "MEMERIKSA..." : "CEK SEMUA"}</button><button onClick={() => setMonitorAuto(false)}>CANCEL</button><button onClick={() => setMonitorResults([])}>HAPUS HASIL</button></div>
-              <div className="monitorSchedule"><label><input type="checkbox" checked={monitorAuto} onChange={(event) => setMonitorAuto(event.target.checked)} /> CEK OTOMATIS</label><span>SETIAP</span><input type="number" min="1" max="1440" value={monitorInterval} onChange={(event) => setMonitorInterval(Math.max(1, Number(event.target.value) || 1))} /><span>MENIT</span><button onClick={() => setMonitorAuto(true)}>SIMPAN JADWAL</button><b>{monitorAuto ? "OTOMATIS ON" : "OTOMATIS OFF"}</b></div>
-              <small className="monitorMeta">Hasil otomatis dihapus saat tanggal WIB berganti. {monitorLastChecked ? `Pengecekan terakhir: ${new Date(monitorLastChecked).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB` : "Belum ada pengecekan."}</small>
+          {kind === "monitor" ? <section className="autoSsStudio">
+            <div className="autoSsTitle"><h1>AUTO SS SITUS</h1><p>Screenshot otomatis semua halaman situs · 2 shift per hari · gambar + link</p></div>
+            <section className="panel autoSsToolbar">
+              <div className="shiftTabs"><button className={monitorShift === "pagi" ? "active" : ""} onClick={() => setMonitorShift("pagi")}>SHIFT PAGI</button><button className={monitorShift === "malam" ? "active" : ""} onClick={() => setMonitorShift("malam")}>SHIFT MALAM</button></div>
+              <div className="autoSsActions"><button className="extensionButton">DOWNLOAD EXTENSION</button><button onClick={() => setMonitorLoginOpen(true)}>{monitorLoginReady ? "LOGIN SIAP" : "LOGIN"}</button><button className="ssAll" onClick={() => checkLinks()} disabled={monitorChecking}>{monitorChecking ? "MEMERIKSA..." : "SS SEMUA"}</button><button onClick={() => setMonitorSettingsOpen(true)}>ATUR LINK</button><button onClick={() => setMonitorAuto(false)}>CANCEL</button><button onClick={() => setMonitorResults([])}>HAPUS</button></div>
+              <div className="extensionStatus">○ EXTENSION BELUM TERPASANG / BELUM AKTIF</div>
+              <div className="autoSsFilter"><label>TANGGAL HASIL <input type="date" value={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })} readOnly /></label><input type="search" placeholder="Cari kategori situs..." /></div>
+              <div className="autoSsSchedule"><label><input type="checkbox" checked={monitorAuto} onChange={(event) => setMonitorAuto(event.target.checked)} /> CEK OTOMATIS</label><span>SETIAP</span><input type="number" min="1" max="1440" value={monitorInterval} onChange={(event) => setMonitorInterval(Math.max(1, Number(event.target.value) || 1))} /><span>MENIT</span><button onClick={() => setMonitorAuto(true)}>SIMPAN JADWAL</button><b>{monitorAuto ? "OTOMATIS ON" : "OTOMATIS OFF"}</b></div>
             </section>
-            <section className="panel monitorInputPanel"><div className="panelHead"><div><span>01</span><h2>Atur Daftar Link</h2></div></div><div className="monitorInput"><Field label="Tempel Link — satu link per baris" value={monitorRaw} onChange={setMonitorRaw} placeholder={"https://contoh1.com\nhttps://contoh2.com"} area /><button onClick={() => checkLinks()} disabled={monitorChecking}>⌕ PROSES CEK DATA</button></div></section>
             {monitorError && <div className="monitorError">{monitorError}</div>}
-            <section className="monitorCards">
-              {monitorResults.map((item) => <article key={item.url} className={item.nawala === "blocked" || item.status === "problem" ? "monitorCard problem" : item.nawala === "safe" ? "monitorCard safe" : "monitorCard unknown"}>
-                <div className="monitorCardHead"><span>{item.nawala === "blocked" ? "NAWALA / DIBLOKIR" : item.status === "problem" ? "TIDAK BISA DIAKSES" : item.nawala === "safe" ? "AMAN TERVERIFIKASI" : "SITUS AKTIF • NAWALA GAGAL"}</span><small>{item.httpStatus ? `HTTP ${item.httpStatus}` : "NO RESPONSE"}</small></div>
-                <h3>{item.hostname}</h3><a href={item.finalUrl || item.url} target="_blank" rel="noreferrer">{item.url}</a>
-                <div className="monitorFacts"><span>Respons: <b>{item.latency} ms</b></span><span>NAWALA: <b>{item.nawala === "blocked" ? "TERBLOKIR" : item.nawala === "safe" ? "AMAN" : "BELUM TERHUBUNG"}</b></span></div>
-                <p>{item.message}</p><time>{new Date(item.checkedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</time>
-                <div className="monitorCardButtons"><button onClick={() => checkLinks(item.url)}>CEK LINK INI</button><a href="https://trustpositif.komdigi.go.id/" target="_blank" rel="noreferrer">CEK TRUSTPOSITIF</a></div>
-              </article>)}
-              {!monitorResults.length && <div className="monitorEmpty">Belum ada hasil. Masukkan daftar link lalu tekan <b>CEK SEMUA</b>.</div>}
-            </section>
+            <section className="autoSsCards">{monitorCategories.filter((category) => category.active).map((category) => {
+              const result = monitorResults.find((item) => { try { return new URL(item.url).hostname === new URL(/^https?:\/\//i.test(category.url) ? category.url : `https://${category.url}`).hostname; } catch { return item.url === category.url; } });
+              return <article className="autoSsCard" key={category.id}><div className="autoSsCardHead"><b>{category.name}</b><span>{monitorShift.toUpperCase()}</span></div><div className={result ? result.status === "safe" ? "ssViewport checked" : "ssViewport failed" : "ssViewport"}><strong>{result ? result.status === "safe" ? "SITUS BERHASIL DICEK" : "SITUS BERMASALAH" : "Belum ada SS"}</strong>{result && <small>{result.httpStatus ? `HTTP ${result.httpStatus} · ${result.latency} ms` : result.message}</small>}</div><div className="autoSsCardFoot"><small>{category.login ? "LOGIN" : "TANPA LOGIN"}</small><button onClick={() => checkLinks(category.url)}>SS SEKARANG</button></div></article>;
+            })}{!monitorCategories.length && <div className="monitorEmpty">Belum ada kategori. Klik <b>ATUR LINK</b> untuk menambahkan kategori dan URL.</div>}</section>
+            {monitorLoginOpen && <div className="autoSsModalBackdrop"><section className="autoSsModal loginModal"><button className="modalClose" onClick={() => setMonitorLoginOpen(false)}>×</button><h2>LOGIN SITUS</h2><p>Akun ini digunakan untuk kategori yang membutuhkan akses login. Password hanya disimpan selama halaman dashboard terbuka.</p><label>USERNAME<input value={monitorUsername} onChange={(event) => setMonitorUsername(event.target.value)} /></label><label>PASSWORD<input type="password" value={monitorPassword} onChange={(event) => setMonitorPassword(event.target.value)} /></label><div><button onClick={() => setMonitorLoginOpen(false)}>BATAL</button><button className="save" onClick={() => { setMonitorLoginReady(Boolean(monitorUsername && monitorPassword)); setMonitorLoginOpen(false); }}>SIMPAN LOGIN SESI</button></div></section></div>}
+            {monitorSettingsOpen && <div className="autoSsModalBackdrop"><section className="autoSsModal settingsModal"><button className="modalClose" onClick={() => setMonitorSettingsOpen(false)}>×</button><h2>PENGATURAN KATEGORI & LINK</h2><p>Edit kategori/link atau tambahkan target baru. Daftar tersimpan lokal pada browser ini.</p><div className="addCategory"><input placeholder="Nama kategori baru" value={monitorCategoryName} onChange={(event) => setMonitorCategoryName(event.target.value)} /><input placeholder="https://alamat-link.com/" value={monitorCategoryUrl} onChange={(event) => setMonitorCategoryUrl(event.target.value)} /><button onClick={() => { if (!monitorCategoryName.trim() || !monitorCategoryUrl.trim()) return; setMonitorCategories((old) => [...old, { id: crypto.randomUUID(), name: monitorCategoryName.trim().toUpperCase(), url: monitorCategoryUrl.trim(), login: false, active: true }]); setMonitorCategoryName(""); setMonitorCategoryUrl(""); }}>TAMBAH KATEGORI</button></div><div className="categoryTable"><div className="categoryHeader"><span>KATEGORI</span><span>URL LINK WEBSITE</span><span>LOGIN</span><span>AKTIF</span><span>AKSI</span></div>{monitorCategories.map((category) => <div className="categoryRow" key={category.id}><input value={category.name} onChange={(event) => setMonitorCategories((old) => old.map((item) => item.id === category.id ? { ...item, name: event.target.value } : item))} /><input value={category.url} onChange={(event) => setMonitorCategories((old) => old.map((item) => item.id === category.id ? { ...item, url: event.target.value } : item))} /><input type="checkbox" checked={category.login} onChange={(event) => setMonitorCategories((old) => old.map((item) => item.id === category.id ? { ...item, login: event.target.checked } : item))} /><input type="checkbox" checked={category.active} onChange={(event) => setMonitorCategories((old) => old.map((item) => item.id === category.id ? { ...item, active: event.target.checked } : item))} /><button onClick={() => setMonitorCategories((old) => old.filter((item) => item.id !== category.id))}>HAPUS</button></div>)}</div></section></div>}
           </section> : kind === "bola" ? <section className="footballStudio">
             <div className="panel footballControls">
               <div className="footballSource"><small>LINK ACUAN PREDIKSI</small><a href={footballData?.sourceUrl || "https://jpkoloni4d.pagesco.de/prediksi-bola-10-11-agustus-2026"} target="_blank" rel="noreferrer">↗ BUKA LINK ACUAN</a><span>Dashboard mengecek data baru otomatis setiap 30 menit.</span></div>
