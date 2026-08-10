@@ -155,11 +155,33 @@ export default function Home() {
   const [usdtCopied, setUsdtCopied] = useState(false);
   const [resultMarket, setResultMarket] = useState("KENTUCKYEVE");
   const [resultCopied, setResultCopied] = useState<"delay" | "done" | null>(null);
+  const [rgbOpen, setRgbOpen] = useState(false);
+  const [rgbOne, setRgbOne] = useState("#ff2442");
+  const [rgbTwo, setRgbTwo] = useState("#f4c542");
+  const [rgbThree, setRgbThree] = useState("#39ff88");
+  const [rgbSpeed, setRgbSpeed] = useState(12);
+  const [rgbLoaded, setRgbLoaded] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
     if (saved) setHistory(JSON.parse(saved));
+    const savedRgb = localStorage.getItem("premankaro-rgb");
+    if (savedRgb) {
+      try {
+        const rgb = JSON.parse(savedRgb);
+        if (rgb.one) setRgbOne(rgb.one);
+        if (rgb.two) setRgbTwo(rgb.two);
+        if (rgb.three) setRgbThree(rgb.three);
+        if (rgb.speed) setRgbSpeed(Number(rgb.speed));
+      } catch {}
+    }
+    setRgbLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (!rgbLoaded) return;
+    localStorage.setItem("premankaro-rgb", JSON.stringify({ one: rgbOne, two: rgbTwo, three: rgbThree, speed: rgbSpeed }));
+  }, [rgbLoaded, rgbOne, rgbTwo, rgbThree, rgbSpeed]);
 
   useEffect(() => {
     const syncClock = () => setUsdtDateTime(getAutomaticDateTime());
@@ -303,8 +325,15 @@ export default function Home() {
     setCopied(false);
   };
 
+  const rgbStyle = {
+    "--rgb-1": rgbOne,
+    "--rgb-2": rgbTwo,
+    "--rgb-3": rgbThree,
+    "--rgb-speed": `${rgbSpeed}s`,
+  } as React.CSSProperties;
+
   return (
-    <AuthGate><main className="shell">
+    <AuthGate><main className="shell" style={rgbStyle}>
       <aside className="sidebar">
         <div className="brand">
           <img className="brandLogo" src="/logo-harimau-gorila-v2.png" alt="Logo Harimau dan Gorila" />
@@ -315,7 +344,7 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="status"><span /> Tersimpan lokal</div></header>
+        <header><div><p className="eyebrow">PROMPT STUDIO / {kinds.find((x) => x.id === kind)?.label.toUpperCase()}</p><p className="sub">Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda.</p></div><div className="headerTools"><div className="status"><span /> Tersimpan lokal</div><button className="rgbToggle" onClick={() => setRgbOpen((open) => !open)}>◉ ATUR RGB</button>{rgbOpen && <div className="rgbPanel"><div className="rgbPanelHead"><b>WARNA TEKS RGB</b><button onClick={() => setRgbOpen(false)}>×</button></div><div className="rgbColors"><label><span>Warna 1</span><input type="color" value={rgbOne} onChange={(event) => setRgbOne(event.target.value)} /></label><label><span>Warna 2</span><input type="color" value={rgbTwo} onChange={(event) => setRgbTwo(event.target.value)} /></label><label><span>Warna 3</span><input type="color" value={rgbThree} onChange={(event) => setRgbThree(event.target.value)} /></label></div><label className="rgbSpeed"><span>Kecepatan: {rgbSpeed} detik</span><input type="range" min="5" max="30" step="1" value={rgbSpeed} onChange={(event) => setRgbSpeed(Number(event.target.value))} /></label><button className="rgbReset" onClick={() => { setRgbOne("#ff2442"); setRgbTwo("#f4c542"); setRgbThree("#39ff88"); setRgbSpeed(12); }}>Reset Warna</button></div>}</div></header>
 
         <div className={kind === "validasi" ? "grid validationGrid" : kind === "usdt" || kind === "result" ? "grid usdtGrid" : "grid"}>
           {kind === "validasi" ? <section className="panel validationPanel">
