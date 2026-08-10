@@ -382,7 +382,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand infinityBrand">
           <span className="infinityAura" />
-          <img className="brandLogo infinityLogo" src="/logo-infinity-premium.jfif" alt="Logo Infinity Premium" />
+          <img className="brandLogo infinityLogo infinityGifLogo" src="/logo-infinity-4d.gif" alt="Logo Infinity 4D Bergerak" />
         </div>
         <p className="navLabel">JENIS POSTINGAN</p>
         <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
