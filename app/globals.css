@@ -96,3 +96,34 @@ body,button,input,textarea,select{font-family:"Bodoni Moda","Bodoni MT",Didot,Ge
   font-family:"Lexend",Arial,sans-serif!important;
   font-variant:normal!important;
 }
+
+/* Sidebar: logo tetap diam, hanya daftar menu yang dapat digulir. */
+.sidebar {
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden!important;
+}
+.sidebar .mBrand {
+  flex:0 0 248px;
+  margin-bottom:18px;
+}
+.sidebarMenuScroll {
+  flex:1 1 auto;
+  min-height:0;
+  padding:4px 2px 28px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(217,164,65,.48) rgba(255,255,255,.025);
+}
+.sidebarMenuScroll::-webkit-scrollbar{width:6px}
+.sidebarMenuScroll::-webkit-scrollbar-track{background:rgba(255,255,255,.02)}
+.sidebarMenuScroll::-webkit-scrollbar-thumb{border-radius:20px;background:linear-gradient(var(--rgb-1),var(--rgb-2),var(--rgb-3))}
+.sidebarMenuScroll .shortcutLabel {
+  margin-top:25px;
+  padding-top:20px;
+  border-top:1px solid rgba(217,164,65,.2);
+}
+/* Hilangkan lingkaran, asap, dan titik cahaya yang mengganggu logo. */
+.mBrand .mSmoke,.mBrand .mHalo,.mBrand .mSpark{display:none!important}

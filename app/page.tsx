@@ -381,14 +381,14 @@ export default function Home() {
     <AuthGate><main className={displayMode === "light" ? "shell techFont lightMode" : "shell techFont darkMode"} style={rgbStyle}>
       <aside className="sidebar">
         <div className="brand mBrand">
-          <span className="mSmoke smokeOne" />
-          <span className="mSmoke smokeTwo" />
-          <span className="mHalo" />
           <img className="brandLogo mLogo" src="/logo-m-4d.gif" alt="Logo M 4D Bergerak" />
-          <span className="mSpark sparkOne" /><span className="mSpark sparkTwo" /><span className="mSpark sparkThree" />
         </div>
-        <p className="navLabel">JENIS POSTINGAN</p>
-        <nav>{kinds.map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
+        <div className="sidebarMenuScroll">
+          <p className="navLabel">PROMPT POSTINGAN</p>
+          <nav>{kinds.slice(0, 4).map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
+          <p className="navLabel shortcutLabel">SHORTCUT</p>
+          <nav>{kinds.slice(4).map((item) => <button key={item.id} className={kind === item.id ? "navItem active" : "navItem"} onClick={() => setKind(item.id)}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>)}</nav>
+        </div>
       </aside>
 
       <section className="workspace">
