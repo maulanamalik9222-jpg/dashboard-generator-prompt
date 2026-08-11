@@ -344,6 +344,7 @@ function Field({
 export default function Home() {
   const [kind, setKind] = useState<Kind>("kemenangan");
   const [kindLoaded, setKindLoaded] = useState(false);
+  const [isMaster, setIsMaster] = useState(false);
   const [form, setForm] = useState<FormState>(initial);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
@@ -470,6 +471,13 @@ export default function Home() {
     setRgbLoaded(true);
     setMonitorLoaded(true);
     setKindLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setIsMaster(data?.user?.role === "admin"))
+      .catch(() => setIsMaster(false));
   }, []);
 
   const loadMonitor = async (shift = monitorShift) => {
@@ -1099,6 +1107,28 @@ export default function Home() {
                 </button>
               ))}
             </nav>
+            {isMaster && (
+              <>
+                <p className="navLabel shortcutLabel">MASTER</p>
+                <nav>
+                  <button
+                    type="button"
+                    className="navItem userManagementNav"
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new Event("premankaro:open-user-management"),
+                      )
+                    }
+                  >
+                    <i>♙</i>
+                    <span>
+                      <b>Manajemen User</b>
+                      <small>Kontrol akun pengguna</small>
+                    </span>
+                  </button>
+                </nav>
+              </>
+            )}
           </div>
         </aside>
 
