@@ -398,6 +398,7 @@ export default function Home() {
   const [monitorLoaded, setMonitorLoaded] = useState(false);
   const [monitorServerReady, setMonitorServerReady] = useState(false);
   const [monitorExtensionReady, setMonitorExtensionReady] = useState(false);
+  const [monitorExtensionWarning, setMonitorExtensionWarning] = useState(false);
   const [monitorExtensionProgress, setMonitorExtensionProgress] = useState("");
   const monitorCaptureResolvers = useRef(
     new Map<
@@ -532,6 +533,7 @@ export default function Home() {
       if (!message || message.source !== "PREMANKARO_EXTENSION") return;
       if (message.type === "PONG") {
         setMonitorExtensionReady(true);
+        setMonitorExtensionWarning(false);
         return;
       }
       if (message.type !== "CAPTURE_RESULT" || !message.requestId) return;
@@ -625,6 +627,10 @@ export default function Home() {
     onlyUrl?: string,
     forcedShift?: "pagi" | "malam",
   ) => {
+    if (!monitorExtensionReady) {
+      setMonitorExtensionWarning(true);
+      return;
+    }
     if (monitorRunLock.current) {
       setMonitorError(
         "Proses screenshot sebelumnya masih berjalan. Tunggu hingga selesai.",
@@ -646,42 +652,26 @@ export default function Home() {
     setMonitorChecking(true);
     setMonitorError("");
     try {
-      if (monitorExtensionReady) {
-        const targets = category
-          ? [category]
-          : monitorCategories.filter((item) => item.active && item.url.trim());
-        const failures: string[] = [];
-        for (let index = 0; index < targets.length; index += 1) {
-          const target = targets[index];
-          setMonitorExtensionProgress(
-            `${index + 1}/${targets.length} · ${target.name}`,
+      const targets = category
+        ? [category]
+        : monitorCategories.filter((item) => item.active && item.url.trim());
+      const failures: string[] = [];
+      for (let index = 0; index < targets.length; index += 1) {
+        const target = targets[index];
+        setMonitorExtensionProgress(
+          `${index + 1}/${targets.length} · ${target.name}`,
+        );
+        try {
+          const capture = await captureWithExtension(target, selectedShift);
+          await saveExtensionScreenshot(target, capture, selectedShift);
+        } catch (error) {
+          failures.push(
+            `${target.name}: ${error instanceof Error ? error.message : "gagal"}`,
           );
-          try {
-            const capture = await captureWithExtension(target, selectedShift);
-            await saveExtensionScreenshot(target, capture, selectedShift);
-          } catch (error) {
-            failures.push(
-              `${target.name}: ${error instanceof Error ? error.message : "gagal"}`,
-            );
-          }
         }
-        await loadMonitor(selectedShift);
-        if (failures.length) setMonitorError(failures.join(" | "));
-        return;
       }
-      const response = await fetch("/api/site-monitor", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "run",
-          shift: selectedShift,
-          categoryId: category?.id,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.error || "Screenshot situs gagal.");
       await loadMonitor(selectedShift);
+      if (failures.length) setMonitorError(failures.join(" | "));
     } catch (error) {
       setMonitorError(
         error instanceof Error ? error.message : "Pengecekan link gagal.",
@@ -1297,7 +1287,7 @@ export default function Home() {
                   <div className="extensionStatus">
                     {monitorExtensionReady
                       ? "● EXTENSION CHROME AKTIF · SCREENSHOT BROWSER NORMAL"
-                      : "○ EXTENSION BELUM AKTIF · BROWSER RUN SEBAGAI CADANGAN"}
+                      : "○ EXTENSION BELUM AKTIF · DOWNLOAD DAN PASANG EXTENSION TERLEBIH DAHULU"}
                   </div>
                   <div className="autoSsFilter">
                     <label>
@@ -1326,6 +1316,30 @@ export default function Home() {
                     <b>CRON OTOMATIS AKTIF</b>
                   </div>
                 </section>
+                {monitorExtensionWarning && (
+                  <div
+                    className="extensionWarningBackdrop"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="extension-warning-title"
+                  >
+                    <section className="extensionWarningBox">
+                      <div className="extensionWarningIcon">!</div>
+                      <small>SYSTEM NOTIFICATION</small>
+                      <h2 id="extension-warning-title">
+                        EXTENSION BELUM AKTIF
+                      </h2>
+                      <p>
+                        Extension screenshot belum terdeteksi. Silakan download,
+                        pasang, dan aktifkan extension SS terlebih dahulu, lalu
+                        refresh dashboard.
+                      </p>
+                      <button onClick={() => setMonitorExtensionWarning(false)}>
+                        MENGERTI
+                      </button>
+                    </section>
+                  </div>
+                )}
                 {monitorError && (
                   <div className="monitorError">{monitorError}</div>
                 )}
@@ -2439,6 +2453,10 @@ export default function Home() {
           @keyframes upLogoFullRotate{0%{transform:translate(-50%,-50%) perspective(1000px) rotateY(0deg) scale(.96);filter:contrast(1.1) saturate(1.25) brightness(1.04) drop-shadow(0 0 12px #00d9ff)}25%{transform:translate(-50%,-50%) perspective(1000px) rotateY(90deg) scale(1);filter:contrast(1.14) saturate(1.38) brightness(1.14) drop-shadow(0 0 18px #ffe600)}50%{transform:translate(-50%,-50%) perspective(1000px) rotateY(180deg) scale(.96);filter:contrast(1.1) saturate(1.25) brightness(1.05) drop-shadow(0 0 13px #00ffa8)}75%{transform:translate(-50%,-50%) perspective(1000px) rotateY(270deg) scale(1);filter:contrast(1.14) saturate(1.38) brightness(1.14) drop-shadow(0 0 18px #00d9ff)}100%{transform:translate(-50%,-50%) perspective(1000px) rotateY(360deg) scale(.96);filter:contrast(1.1) saturate(1.25) brightness(1.04) drop-shadow(0 0 12px #ffe600)}}
           @keyframes upFrameGlow{50%{border-color:rgba(0,255,168,.34);box-shadow:inset 0 0 42px #000,0 0 26px rgba(0,217,255,.2)}}@keyframes upEnergyLine{to{background-position:240% 0}}
           .autoSsActions .extensionButton{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 20px;border:1px solid #586472;border-radius:10px;color:#d9dee4;background:#242c36;font-size:9px;font-weight:900;text-decoration:none}
+          .extensionWarningBackdrop{position:fixed;z-index:10050;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.78);backdrop-filter:blur(8px)}
+          .extensionWarningBox{position:relative;width:min(460px,94vw);padding:28px 32px 30px;border:1px solid rgba(255,214,91,.45);border-radius:20px;text-align:center;color:#fff;background:radial-gradient(circle at 50% 0,rgba(255,215,86,.12),transparent 38%),linear-gradient(145deg,#121d28,#071019);box-shadow:0 30px 100px #000,0 0 36px rgba(255,210,66,.1)}
+          .extensionWarningIcon{width:54px;height:54px;margin:0 auto 14px;display:grid;place-items:center;border:1px solid #d6ae4d;border-radius:15px;color:#ffe18a;background:linear-gradient(145deg,rgba(209,161,54,.25),rgba(255,220,111,.07));box-shadow:0 0 24px rgba(255,210,66,.13);font-size:25px;font-weight:900}
+          .extensionWarningBox small{display:block;color:#d4b85d;font-size:8px;font-weight:900;letter-spacing:.22em}.extensionWarningBox h2{margin:9px 0 8px;color:#fff!important;-webkit-text-fill-color:#fff!important;background:none!important;font-family:"Lexend","Nunito",Arial,sans-serif!important;font-size:24px!important;font-weight:900!important;letter-spacing:.02em;text-shadow:0 0 20px rgba(255,255,255,.14);animation:none!important}.extensionWarningBox p{max-width:370px;margin:0 auto;color:#d6e0e5;font-family:"Lexend","Nunito",Arial,sans-serif;font-size:11px;line-height:1.65}.extensionWarningBox button{min-width:145px;margin-top:21px;padding:13px 20px;border:1px solid #e5bd58;border-radius:10px;color:#fff;background:linear-gradient(135deg,#a97925,#e1b84f);box-shadow:0 10px 28px rgba(222,177,65,.22);font-family:"Lexend","Nunito",Arial,sans-serif;font-size:11px;font-weight:900}.extensionWarningBox button:hover{filter:brightness(1.12);transform:translateY(-1px)}
           .ssThumbnailButton img{display:block;width:100%;height:138px;object-fit:cover;object-position:top center;background:#05090c}
           .ssThumbnailButton span{position:absolute;right:7px;bottom:7px;padding:5px 8px;border-radius:5px;color:#ffe394;background:rgba(5,8,10,.88);font-size:7px;font-weight:900;letter-spacing:.04em;box-shadow:0 3px 12px #000}
           .autoSsCardFoot{gap:6px}.autoSsCardFoot small{margin-right:auto}.autoSsCardFoot .viewSsButton{color:#dfffee;border-color:#42b98a;background:#103d30}
