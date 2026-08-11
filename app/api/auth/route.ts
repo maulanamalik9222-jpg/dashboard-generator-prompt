@@ -178,16 +178,42 @@ export async function POST(req: Request) {
     if (target.id === master.id)
       return json({ error: "Akun master tidak dapat dinonaktifkan." }, 400);
     const status = body.status === "active" ? "active" : "inactive";
-    await db()
-      .prepare("UPDATE users SET status=? WHERE id=?")
-      .bind(status, target.id)
-      .run();
-    if (status === "inactive")
-      await db()
-        .prepare("DELETE FROM sessions WHERE user_id=?")
-        .bind(target.id)
+    try {
+      const update = await db()
+        .prepare("UPDATE users SET status=? WHERE id=?")
+        .bind(status, target.id)
         .run();
-    return json({ ok: true });
+      if (!update.success)
+        return json({ error: "Status pengguna gagal disimpan di database." }, 500);
+
+      const saved = await db()
+        .prepare("SELECT status FROM users WHERE id=?")
+        .bind(target.id)
+        .first<{ status: string }>();
+      if (saved?.status !== status)
+        return json({ error: "Status pengguna belum berubah. Silakan ulangi." }, 500);
+
+      // Sesi lama hanya pembersihan tambahan. Akun tetap langsung diblokir
+      // oleh currentUser() karena status diperiksa pada setiap request.
+      if (status === "inactive") {
+        try {
+          await db()
+            .prepare("DELETE FROM sessions WHERE user_id=?")
+            .bind(target.id)
+            .run();
+        } catch (sessionError) {
+          console.error("Gagal membersihkan sesi pengguna:", sessionError);
+        }
+      }
+      return json({ ok: true, status });
+    } catch (cause) {
+      console.error("Gagal mengubah status pengguna:", cause);
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      return json(
+        { error: `Gagal mengubah status akun: ${detail || "database error"}` },
+        500,
+      );
+    }
   }
 
   if (action === "delete-user") {
