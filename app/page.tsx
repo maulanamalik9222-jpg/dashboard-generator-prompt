@@ -407,6 +407,7 @@ export default function Home() {
       }
     >(),
   );
+  const monitorRunLock = useRef(false);
   const [monitorPreview, setMonitorPreview] = useState<{
     id: string;
     name: string;
@@ -579,7 +580,15 @@ export default function Home() {
         challenge: Boolean(capture.challenge),
       }),
     });
-    const data = await response.json();
+    const responseText = await response.text();
+    let data: any = {};
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      throw new Error(
+        `Server HTTP ${response.status}: ${responseText.slice(0, 140) || "respons bukan JSON"}`,
+      );
+    }
     if (!response.ok)
       throw new Error(data.error || "Screenshot gagal disimpan.");
   };
@@ -588,6 +597,12 @@ export default function Home() {
     onlyUrl?: string,
     forcedShift?: "pagi" | "malam",
   ) => {
+    if (monitorRunLock.current) {
+      setMonitorError(
+        "Proses screenshot sebelumnya masih berjalan. Tunggu hingga selesai.",
+      );
+      return;
+    }
     const selectedShift = forcedShift || monitorShift;
     const category = onlyUrl
       ? monitorCategories.find((item) => item.url === onlyUrl)
@@ -599,6 +614,7 @@ export default function Home() {
       setMonitorError("Masukkan minimal satu link.");
       return;
     }
+    monitorRunLock.current = true;
     setMonitorChecking(true);
     setMonitorError("");
     try {
@@ -643,6 +659,7 @@ export default function Home() {
         error instanceof Error ? error.message : "Pengecekan link gagal.",
       );
     } finally {
+      monitorRunLock.current = false;
       setMonitorExtensionProgress("");
       setMonitorChecking(false);
     }
