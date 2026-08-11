@@ -32,6 +32,7 @@ type FootballData = {
 };
 type LinkCheckResult = {
   id?: string;
+  hasImage?: boolean;
   categoryId?: string;
   url: string;
   hostname: string;
@@ -394,6 +395,11 @@ export default function Home() {
   const [monitorSearch, setMonitorSearch] = useState("");
   const [monitorLoaded, setMonitorLoaded] = useState(false);
   const [monitorServerReady, setMonitorServerReady] = useState(false);
+  const [monitorPreview, setMonitorPreview] = useState<{
+    id: string;
+    name: string;
+    checkedAt: string;
+  } | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
@@ -455,6 +461,7 @@ export default function Home() {
       setMonitorResults(
         (data.results || []).map((item: any) => ({
           id: String(item.id),
+          hasImage: Boolean(item.hasImage),
           categoryId: String(item.categoryId),
           url: "",
           hostname: "",
@@ -1114,11 +1121,26 @@ export default function Home() {
                                 : "ssViewport"
                             }
                           >
-                            {result?.id && result.status === "safe" && (
-                              <img
-                                src={`/api/site-monitor?image=${encodeURIComponent(result.id)}`}
-                                alt={`Screenshot ${category.name}`}
-                              />
+                            {result?.id && result.hasImage && (
+                              <button
+                                type="button"
+                                className="ssThumbnailButton"
+                                title="Klik dua kali untuk melihat screenshot penuh"
+                                onDoubleClick={() =>
+                                  setMonitorPreview({
+                                    id: result.id!,
+                                    name: category.name,
+                                    checkedAt: result.checkedAt,
+                                  })
+                                }
+                                onClick={(event) => event.preventDefault()}
+                              >
+                                <img
+                                  src={`/api/site-monitor?image=${encodeURIComponent(result.id)}&v=${encodeURIComponent(result.checkedAt)}`}
+                                  alt={`Screenshot ${category.name}`}
+                                />
+                                <span>DOUBLE KLIK UNTUK LIHAT</span>
+                              </button>
                             )}
                             <strong>
                               {result
@@ -1139,6 +1161,20 @@ export default function Home() {
                             <small>
                               {category.login ? "LOGIN" : "TANPA LOGIN"}
                             </small>
+                            {result?.id && result.hasImage && (
+                              <button
+                                className="viewSsButton"
+                                onClick={() =>
+                                  setMonitorPreview({
+                                    id: result.id!,
+                                    name: category.name,
+                                    checkedAt: result.checkedAt,
+                                  })
+                                }
+                              >
+                                LIHAT SS
+                              </button>
+                            )}
                             <button onClick={() => checkLinks(category.url)}>
                               SS SEKARANG
                             </button>
@@ -1153,6 +1189,43 @@ export default function Home() {
                     </div>
                   )}
                 </section>
+                {monitorPreview && (
+                  <div
+                    className="ssPreviewBackdrop"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Screenshot ${monitorPreview.name}`}
+                    onClick={() => setMonitorPreview(null)}
+                  >
+                    <section
+                      className="ssPreviewModal"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <header className="ssPreviewHead">
+                        <div>
+                          <strong>{monitorPreview.name}</strong>
+                          <small>Screenshot halaman penuh</small>
+                        </div>
+                        <a
+                          href={`/api/site-monitor?image=${encodeURIComponent(monitorPreview.id)}&v=${encodeURIComponent(monitorPreview.checkedAt)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          BUKA TAB BARU
+                        </a>
+                        <button onClick={() => setMonitorPreview(null)}>
+                          ×
+                        </button>
+                      </header>
+                      <div className="ssPreviewImageWrap">
+                        <img
+                          src={`/api/site-monitor?image=${encodeURIComponent(monitorPreview.id)}&v=${encodeURIComponent(monitorPreview.checkedAt)}`}
+                          alt={`Screenshot penuh ${monitorPreview.name}`}
+                        />
+                      </div>
+                    </section>
+                  </div>
+                )}
                 {monitorLoginOpen && (
                   <div className="autoSsModalBackdrop">
                     <section className="autoSsModal loginModal">
@@ -2115,6 +2188,19 @@ export default function Home() {
               </section>
             )}
         </section>
+        <style>{`
+          .ssThumbnailButton{position:relative;display:block;width:100%;max-width:100%;padding:0;overflow:hidden;border:1px solid rgba(104,224,183,.5);border-radius:9px;background:#03090c;cursor:zoom-in}
+          .ssThumbnailButton img{display:block;width:100%;height:115px;object-fit:cover;object-position:top center;background:#05090c}
+          .ssThumbnailButton span{position:absolute;right:7px;bottom:7px;padding:5px 8px;border-radius:5px;color:#ffe394;background:rgba(5,8,10,.88);font-size:7px;font-weight:900;letter-spacing:.04em;box-shadow:0 3px 12px #000}
+          .autoSsCardFoot{gap:6px}.autoSsCardFoot small{margin-right:auto}.autoSsCardFoot .viewSsButton{color:#dfffee;border-color:#42b98a;background:#103d30}
+          .ssPreviewBackdrop{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.88);backdrop-filter:blur(7px)}
+          .ssPreviewModal{display:flex;flex-direction:column;width:min(1180px,96vw);height:min(94vh,980px);overflow:hidden;border:1px solid rgba(238,196,92,.55);border-radius:16px;background:#071019;box-shadow:0 30px 100px #000}
+          .ssPreviewHead{display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:12px 15px;border-bottom:1px solid #2f3943;background:#101a25}
+          .ssPreviewHead div{display:grid;margin-right:auto}.ssPreviewHead strong{color:#fff;font-size:13px}.ssPreviewHead small{margin-top:3px;color:#8da0ae;font-size:9px}
+          .ssPreviewHead a,.ssPreviewHead button{padding:9px 12px;border:1px solid #b9913f;border-radius:8px;color:#ffe38c;background:#242015;font-size:8px;font-weight:900;text-decoration:none}.ssPreviewHead button{width:36px;color:#fff;background:#61202a}
+          .ssPreviewImageWrap{flex:1;overflow:auto;padding:12px;text-align:center;background:#020609}.ssPreviewImageWrap img{display:block;width:min(100%,1280px);height:auto;margin:auto;border-radius:8px;background:#fff}
+          @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}}
+        `}</style>
       </main>
     </AuthGate>
   );

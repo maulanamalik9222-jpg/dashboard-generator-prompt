@@ -22,6 +22,25 @@ const json = (data: unknown, status = 200) =>
 const delay = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+/**
+ * Nilai BLOB D1 dapat dikembalikan sebagai ArrayBuffer, typed-array, atau
+ * array angka (tergantung versi runtime). Response() tidak boleh menerima
+ * array angka secara langsung karena hasilnya berubah menjadi teks dan JPEG
+ * menjadi rusak. Selalu normalkan kembali menjadi Uint8Array.
+ */
+function blobToBytes(value: unknown): Uint8Array {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (Array.isArray(value)) return Uint8Array.from(value.map(Number));
+  if (value && typeof value === "object" && "data" in value) {
+    const data = (value as { data?: unknown }).data;
+    if (Array.isArray(data)) return Uint8Array.from(data.map(Number));
+  }
+  throw new Error("Format BLOB screenshot dari D1 tidak dikenali.");
+}
+
 function wibDay(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
@@ -379,13 +398,31 @@ export async function GET(request: Request) {
         "SELECT image,mime FROM monitor_screenshots WHERE id=? AND day=?",
       )
       .bind(imageId, wibDay())
-      .first<{ image: ArrayBuffer; mime: string }>();
+      .first<{ image: unknown; mime: string }>();
     if (!row)
       return new Response("Screenshot tidak ditemukan.", { status: 404 });
-    return new Response(row.image, {
+    let bytes: Uint8Array;
+    try {
+      bytes = blobToBytes(row.image);
+    } catch (error) {
+      return new Response(
+        error instanceof Error ? error.message : "Screenshot tidak valid.",
+        { status: 500 },
+      );
+    }
+    if (bytes.byteLength < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+      return new Response("Data screenshot JPEG rusak. Silakan SS ulang.", {
+        status: 422,
+      });
+    }
+    const responseBody = bytes.slice().buffer as ArrayBuffer;
+    return new Response(responseBody, {
       headers: {
-        "content-type": row.mime,
+        "content-type": row.mime || "image/jpeg",
+        "content-length": String(bytes.byteLength),
         "cache-control": "private, no-store",
+        "content-disposition": `inline; filename="screenshot-${imageId}.jpg"`,
+        "x-content-type-options": "nosniff",
       },
     });
   }
@@ -399,7 +436,9 @@ export async function GET(request: Request) {
     runtime()
       .DB.prepare(
         `SELECT id,category_id categoryId,status,http_status httpStatus,
-      final_url finalUrl,message,checked_at checkedAt FROM monitor_screenshots
+      final_url finalUrl,message,checked_at checkedAt,
+      CASE WHEN length(image)>100 THEN 1 ELSE 0 END hasImage
+      FROM monitor_screenshots
       WHERE day=? AND shift=? ORDER BY checked_at DESC`,
       )
       .bind(wibDay(), shift)
