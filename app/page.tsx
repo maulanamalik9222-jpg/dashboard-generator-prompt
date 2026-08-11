@@ -875,8 +875,11 @@ export default function Home() {
   }, [rgbLoaded, rgbOne, rgbTwo, rgbThree, rgbSpeed]);
 
   useEffect(() => {
+    if (!rgbLoaded) return;
     localStorage.setItem("premankaro-display-mode", displayMode);
-  }, [displayMode]);
+    document.documentElement.dataset.theme = displayMode;
+    document.documentElement.style.colorScheme = displayMode;
+  }, [displayMode, rgbLoaded]);
 
   useEffect(() => {
     if (!kindLoaded) return;
@@ -1150,7 +1153,9 @@ export default function Home() {
                 <span /> ONLINE
               </div>
               <button
+                type="button"
                 className="modeToggle"
+                aria-pressed={displayMode === "light"}
                 onClick={() =>
                   setDisplayMode((mode) => (mode === "dark" ? "light" : "dark"))
                 }
@@ -2443,6 +2448,19 @@ export default function Home() {
           .ssPreviewHead div{display:grid;margin-right:auto}.ssPreviewHead strong{color:#fff;font-size:13px}.ssPreviewHead small{margin-top:3px;color:#8da0ae;font-size:9px}
           .ssPreviewHead a,.ssPreviewHead button{padding:9px 12px;border:1px solid #b9913f;border-radius:8px;color:#ffe38c;background:#242015;font-size:8px;font-weight:900;text-decoration:none}.ssPreviewHead button{width:36px;color:#fff;background:#61202a}
           .ssPreviewImageWrap{flex:1;overflow:auto;padding:0;text-align:center;background:#020609}.ssPreviewImageWrap img{display:block;width:100%;height:auto;margin:0;border-radius:0;background:#fff}
+          .shell.lightMode{--ink:#eef9fb;--panel:#ffffff;--line:rgba(0,130,165,.23);--muted:#48666d;color:#102a31!important;color-scheme:light;background:radial-gradient(circle at 82% 0%,rgba(0,196,255,.15),transparent 35%),radial-gradient(circle at 55% 82%,rgba(255,225,0,.13),transparent 32%),repeating-linear-gradient(135deg,rgba(0,135,165,.025) 0 1px,transparent 1px 8px),#edf8fa!important}
+          .shell.lightMode::before{opacity:.075!important;mix-blend-mode:multiply}.shell.lightMode::after{opacity:.35;background:radial-gradient(circle at 50% 50%,transparent 42%,rgba(0,143,174,.07) 100%)}
+          .shell.lightMode .sidebar{border-color:rgba(0,145,180,.25)!important;background:linear-gradient(180deg,rgba(249,254,255,.99),rgba(225,242,246,.99))!important;box-shadow:16px 0 45px rgba(17,92,108,.12)!important}
+          .shell.lightMode .upBrand{background:radial-gradient(circle at 30% 45%,rgba(255,226,0,.2),transparent 40%),radial-gradient(circle at 72% 46%,rgba(0,205,255,.18),transparent 43%),linear-gradient(145deg,#f9ffff,#ddecf0)!important;box-shadow:0 18px 42px rgba(12,77,91,.15),0 0 25px rgba(0,207,255,.1)!important}
+          .shell.lightMode .navLabel{color:#47717a}.shell.lightMode .navItem{color:#3f626a!important}.shell.lightMode .navItem small{color:#708c92!important}.shell.lightMode .navItem:hover,.shell.lightMode .navItem.active{color:#092f38!important;background:linear-gradient(90deg,rgba(0,197,239,.15),rgba(255,225,0,.12))!important}
+          .shell.lightMode .sub,.shell.lightMode .field span,.shell.lightMode .referenceGuide span,.shell.lightMode .promptTop,.shell.lightMode .quality small{color:#58767d!important}.shell.lightMode .status{color:#31565e!important;background:rgba(255,255,255,.76)!important}
+          .shell.lightMode .panel,.shell.lightMode .autoSsToolbar,.shell.lightMode .autoSsCard,.shell.lightMode .validationResult,.shell.lightMode .resultInfoOutput{border-color:rgba(0,146,181,.25)!important;color:#16343b!important;background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(230,244,247,.98))!important;box-shadow:0 22px 55px rgba(20,94,109,.13),inset 0 1px #fff!important}
+          .shell.lightMode .panelHead{border-color:rgba(0,146,181,.18)!important}.shell.lightMode .ghost{color:#12363e!important;background:linear-gradient(135deg,#fffbd9,#bff5f2)!important}.shell.lightMode .modeToggle{color:#eaffff!important;background:linear-gradient(135deg,#07586a,#021b24)!important}
+          .shell.lightMode .field input,.shell.lightMode .field textarea,.shell.lightMode select,.shell.lightMode .autoSsSearch input,.shell.lightMode .autoSsDate input{border-color:rgba(0,145,180,.24)!important;color:#15343b!important;background:rgba(255,255,255,.9)!important}.shell.lightMode .field input::placeholder,.shell.lightMode .field textarea::placeholder{color:#82999e}
+          .shell.lightMode .referenceGuide,.shell.lightMode .syairGuide,.shell.lightMode .usdtIntro,.shell.lightMode .resultInfoIntro,.shell.lightMode .validationIntro,.shell.lightMode .quality,.shell.lightMode .usdtClock{border-color:rgba(0,145,180,.2)!important;background:linear-gradient(135deg,rgba(0,207,255,.08),rgba(255,225,0,.07))!important}
+          .shell.lightMode .promptBox,.shell.lightMode .adjustedName,.shell.lightMode .resultMessageBox,.shell.lightMode .usdtOutput,.shell.lightMode .footballCode{border-color:rgba(0,145,180,.2)!important;background:#f7fcfd!important}.shell.lightMode .promptBox p,.shell.lightMode .resultMessageBox p,.shell.lightMode .usdtOutput pre,.shell.lightMode .footballCode textarea{color:#29474e!important;background:transparent!important}
+          .shell.lightMode .secondary,.shell.lightMode .historyGrid button,.shell.lightMode .resultStats div{border-color:rgba(0,145,180,.22)!important;color:#315860!important;background:rgba(255,255,255,.68)!important}.shell.lightMode .userBar{border-color:rgba(0,145,180,.25)!important;background:rgba(244,252,253,.96)!important}.shell.lightMode .userBar span{color:#315860!important}
+          .shell.darkMode{color-scheme:dark}
           @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}}
         `}</style>
       </main>
