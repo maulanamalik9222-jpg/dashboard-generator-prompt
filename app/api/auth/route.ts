@@ -177,7 +177,8 @@ export async function POST(req: Request) {
   if (action === "set-status") {
     if (target.id === master.id)
       return json({ error: "Akun master tidak dapat dinonaktifkan." }, 400);
-    const status = body.status === "active" ? "active" : "inactive";
+    // Skema D1 menggunakan CHECK status IN ('active','disabled').
+    const status = body.status === "active" ? "active" : "disabled";
     try {
       const update = await db()
         .prepare("UPDATE users SET status=? WHERE id=?")
@@ -195,7 +196,7 @@ export async function POST(req: Request) {
 
       // Sesi lama hanya pembersihan tambahan. Akun tetap langsung diblokir
       // oleh currentUser() karena status diperiksa pada setiap request.
-      if (status === "inactive") {
+      if (status === "disabled") {
         try {
           await db()
             .prepare("DELETE FROM sessions WHERE user_id=?")

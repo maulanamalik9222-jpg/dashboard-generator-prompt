@@ -7,7 +7,7 @@ type User = {
   name: string;
   email: string;
   role: "admin" | "user";
-  status?: "active" | "inactive";
+  status?: "active" | "disabled";
   created_at?: number;
 };
 
@@ -222,7 +222,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             </div>
             <div className="managementUsers">
               {users.map((target) => {
-                const active = target.status !== "inactive";
+                const active = target.status === "active";
                 const isMaster = target.role === "admin";
                 return (
                   <div className="managementUserRow" key={target.id}>
@@ -265,7 +265,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                             disabled={busyId === target.id}
                             onClick={() =>
                               runUserAction(target, "set-status", {
-                                status: active ? "inactive" : "active",
+                                status: active ? "disabled" : "active",
                               })
                             }
                           >
