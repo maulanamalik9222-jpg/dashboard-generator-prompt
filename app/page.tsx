@@ -1054,7 +1054,7 @@ export default function Home() {
             <span className="upAura upAuraTwo" />
             <img
               className="brandLogo upLogo"
-              src="/logo-up-premium.png"
+              src="/logo-up-premium-transparent.png"
               alt="Logo UP Premium 3D Bergerak"
             />
           </div>
