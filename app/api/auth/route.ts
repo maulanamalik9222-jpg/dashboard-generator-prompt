@@ -13,20 +13,23 @@ const json = (data: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(data, { status, headers });
 
 const emailValid = (email: string) => /^\S+@\S+\.\S+$/.test(email);
+const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor"] as const;
+async function ensureMenuAccessTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_menu_access (user_id TEXT NOT NULL,menu_id TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,updated_at INTEGER NOT NULL,PRIMARY KEY (user_id,menu_id))`).run()}
+async function menuAccessFor(userId:string,role:string){if(role==="admin")return [...MENU_IDS];await ensureMenuAccessTable();const rows=await db().prepare("SELECT menu_id,enabled FROM user_menu_access WHERE user_id=?").bind(userId).all<{menu_id:string;enabled:number}>();if(!rows.results.length)return [...MENU_IDS];return rows.results.filter(row=>Number(row.enabled)===1).map(row=>row.menu_id).filter(id=>MENU_IDS.includes(id as (typeof MENU_IDS)[number]))}
 
 export async function GET(req: Request) {
   const user = await currentUser(req);
-  return user
-    ? json({
+  if(user){const access=await menuAccessFor(user.id,user.role);return json({
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
+          access,
         },
         expiresAt: user.expires_at,
-      })
-    : json({ error: "Belum login" }, 401);
+      })}
+  return json({ error: "Belum login" }, 401);
 }
 
 export async function POST(req: Request) {
@@ -114,12 +117,14 @@ export async function POST(req: Request) {
     return json({ error: "Hanya master yang dapat mengelola pengguna." }, 403);
 
   if (action === "list-users") {
+    await ensureMenuAccessTable();
     const result = await db()
       .prepare(
         "SELECT id,name,email,role,status,created_at FROM users ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END, created_at DESC",
       )
       .all();
-    return json({ users: result.results });
+    const users=await Promise.all((result.results as any[]).map(async listedUser=>({...listedUser,access:await menuAccessFor(listedUser.id,listedUser.role)})));
+    return json({ users });
   }
 
   const targetId = String(body.id || "");
@@ -147,6 +152,7 @@ export async function POST(req: Request) {
         .prepare("UPDATE users SET name=?,email=? WHERE id=?")
         .bind(name, email, target.id)
         .run();
+      if(Array.isArray(body.access)){await ensureMenuAccessTable();const allowed=new Set(body.access.map((value:unknown)=>String(value)).filter((id:string)=>MENU_IDS.includes(id as (typeof MENU_IDS)[number])));await db().prepare("DELETE FROM user_menu_access WHERE user_id=?").bind(target.id).run();for(const menuId of MENU_IDS){await db().prepare("INSERT INTO user_menu_access(user_id,menu_id,enabled,updated_at) VALUES(?,?,?,?)").bind(target.id,menuId,allowed.has(menuId)?1:0,Date.now()).run()}}
       return json({ ok: true });
     } catch {
       return json({ error: "Email sudah digunakan pengguna lain." }, 409);
@@ -224,6 +230,8 @@ export async function POST(req: Request) {
       .prepare("DELETE FROM sessions WHERE user_id=?")
       .bind(target.id)
       .run();
+    await ensureMenuAccessTable();
+    await db().prepare("DELETE FROM user_menu_access WHERE user_id=?").bind(target.id).run();
     await db().prepare("DELETE FROM users WHERE id=?").bind(target.id).run();
     return json({ ok: true });
   }
