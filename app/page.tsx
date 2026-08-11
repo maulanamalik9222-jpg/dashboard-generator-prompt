@@ -363,9 +363,9 @@ export default function Home() {
     null,
   );
   const [rgbOpen, setRgbOpen] = useState(false);
-  const [rgbOne, setRgbOne] = useState("#ff2442");
-  const [rgbTwo, setRgbTwo] = useState("#f4c542");
-  const [rgbThree, setRgbThree] = useState("#39ff88");
+  const [rgbOne, setRgbOne] = useState("#00d9ff");
+  const [rgbTwo, setRgbTwo] = useState("#ffe600");
+  const [rgbThree, setRgbThree] = useState("#00ffa8");
   const [rgbSpeed, setRgbSpeed] = useState(12);
   const [rgbLoaded, setRgbLoaded] = useState(false);
   const [displayMode, setDisplayMode] = useState<"dark" | "light">("dark");
@@ -417,7 +417,11 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem("prompt-history");
     if (saved) setHistory(JSON.parse(saved));
-    const savedRgb = localStorage.getItem("premankaro-rgb");
+    const savedThemeVersion = localStorage.getItem("premankaro-theme-version");
+    const savedRgb =
+      savedThemeVersion === "up-cyan-v1"
+        ? localStorage.getItem("premankaro-rgb")
+        : null;
     const savedMode = localStorage.getItem("premankaro-display-mode");
     const savedMonitor = localStorage.getItem("premankaro-link-monitor");
     if (savedMode === "light" || savedMode === "dark")
@@ -430,7 +434,18 @@ export default function Home() {
         if (rgb.three) setRgbThree(rgb.three);
         if (rgb.speed) setRgbSpeed(Number(rgb.speed));
       } catch {}
+    } else {
+      localStorage.setItem(
+        "premankaro-rgb",
+        JSON.stringify({
+          one: "#00d9ff",
+          two: "#ffe600",
+          three: "#00ffa8",
+          speed: 12,
+        }),
+      );
     }
+    localStorage.setItem("premankaro-theme-version", "up-cyan-v1");
     if (savedMonitor) {
       try {
         const monitor = JSON.parse(savedMonitor);
@@ -1034,11 +1049,13 @@ export default function Home() {
         style={rgbStyle}
       >
         <aside className="sidebar">
-          <div className="brand mBrand">
+          <div className="brand upBrand">
+            <span className="upAura upAuraOne" />
+            <span className="upAura upAuraTwo" />
             <img
-              className="brandLogo mLogo"
-              src="/logo-m-4d.gif"
-              alt="Logo M 4D Bergerak"
+              className="brandLogo upLogo"
+              src="/logo-up-premium.png"
+              alt="Logo UP Premium 3D Bergerak"
             />
           </div>
           <div className="sidebarMenuScroll">
@@ -2366,6 +2383,19 @@ export default function Home() {
         </section>
         <style>{`
           .ssThumbnailButton{position:relative;display:block;width:100%;max-width:100%;padding:0;overflow:hidden;border:1px solid rgba(104,224,183,.5);border-radius:9px;background:#03090c;cursor:zoom-in}
+          .shell{--emerald:#00cfff;--gold:#ffe100;--lime:#43ffc1;--line:rgba(0,211,255,.22);--muted:#a5c6cd;background:radial-gradient(circle at 82% 0%,rgba(0,181,255,.2),transparent 35%),radial-gradient(circle at 58% 80%,rgba(255,225,0,.09),transparent 31%),repeating-linear-gradient(135deg,rgba(0,220,255,.018) 0 1px,transparent 1px 8px),#02080b}
+          .shell::before{background:conic-gradient(from 0deg,transparent 0 8%,#00d9ff 17%,transparent 29%,#ffe600 41%,transparent 53%,#00ffa8 65%,transparent 76%,#00a8ff 88%,transparent 100%)}
+          .shell .sidebar{border-color:rgba(0,211,255,.3);background:linear-gradient(180deg,rgba(2,13,18,.98),rgba(1,5,8,.98));box-shadow:16px 0 55px rgba(0,0,0,.48),4px 0 24px rgba(0,207,255,.06)}
+          .shell .panel,.shell .autoSsToolbar,.shell .autoSsCard{border-color:rgba(0,207,255,.25);background:linear-gradient(145deg,rgba(7,24,31,.97),rgba(3,10,14,.98));box-shadow:0 22px 55px rgba(0,0,0,.38),inset 0 1px rgba(255,230,0,.03)}
+          .shell .navItem:hover,.shell .navItem.active{border-color:rgba(0,217,255,.38);background:linear-gradient(90deg,rgba(0,194,255,.17),rgba(255,230,0,.055))}.shell .navItem.active i{color:#001015;background:linear-gradient(145deg,#ffe600,#00d9ff);box-shadow:0 0 20px rgba(0,217,255,.28)}
+          .shell .primary,.shell .validateButton{color:#001116;background:linear-gradient(135deg,#00d9ff,#00a8d7);box-shadow:0 12px 34px rgba(0,207,255,.2)}.shell .generate{color:#101000;background:linear-gradient(135deg,#fff27a,#ffe100)}
+          .shell .field input,.shell .field textarea{border-color:rgba(0,207,255,.19);background:rgba(1,10,14,.78)}.shell .field input:focus,.shell .field textarea:focus{border-color:rgba(0,220,255,.62);box-shadow:0 0 0 3px rgba(0,211,255,.09)}
+          .upBrand{height:248px;perspective:1100px;isolation:isolate;overflow:hidden;background:radial-gradient(circle at 28% 48%,rgba(255,230,0,.18),transparent 38%),radial-gradient(circle at 72% 48%,rgba(0,217,255,.2),transparent 42%),linear-gradient(145deg,#02090c,#000)!important;border-color:rgba(0,213,255,.36)!important;box-shadow:0 18px 48px rgba(0,0,0,.58),0 0 28px rgba(0,213,255,.1)!important}
+          .upBrand::before{z-index:0;inset:8px;border-color:rgba(255,230,0,.18);box-shadow:inset 0 0 35px #000,0 0 20px rgba(0,217,255,.12);animation:upFrameGlow 4.5s ease-in-out infinite}.upBrand::after{z-index:6;left:10%;right:10%;height:2px;background:linear-gradient(90deg,transparent,#ffe600,#00d9ff,#00ffa8,transparent);background-size:240% 100%;animation:upEnergyLine 3.4s linear infinite}
+          .upLogo{position:relative;z-index:4;width:94%!important;height:224px!important;object-fit:contain!important;transform-style:preserve-3d;backface-visibility:visible;animation:upLogoRotate 8.5s linear infinite!important;filter:contrast(1.08) saturate(1.2) drop-shadow(0 14px 18px rgba(0,0,0,.65)) drop-shadow(0 0 10px rgba(0,217,255,.3)) drop-shadow(0 0 16px rgba(255,230,0,.16))!important}
+          .upAura{position:absolute;z-index:1;left:50%;top:50%;border-radius:50%;pointer-events:none;mix-blend-mode:screen}.upAuraOne{width:80%;height:62%;border:1px solid rgba(0,217,255,.38);box-shadow:0 0 18px rgba(0,217,255,.28),inset 0 0 22px rgba(255,230,0,.1);transform:translate(-50%,-50%) rotateX(70deg);animation:upAuraSpin 7s linear infinite}.upAuraTwo{width:64%;height:78%;background:conic-gradient(from 0deg,transparent,#ffe60066,transparent,#00d9ff70,transparent,#00ffa850,transparent);filter:blur(14px);opacity:.42;transform:translate(-50%,-50%);animation:upAuraSpinFlat 10s linear infinite reverse}
+          @keyframes upLogoRotate{0%{transform:perspective(900px) rotateY(0deg) translateY(1px)}25%{filter:contrast(1.12) saturate(1.35) brightness(1.08) drop-shadow(0 0 15px #00d9ff)}50%{transform:perspective(900px) rotateY(180deg) translateY(-3px)}75%{filter:contrast(1.12) saturate(1.35) brightness(1.1) drop-shadow(0 0 15px #ffe600)}100%{transform:perspective(900px) rotateY(360deg) translateY(1px)}}
+          @keyframes upAuraSpin{to{transform:translate(-50%,-50%) rotateX(70deg) rotateZ(360deg)}}@keyframes upAuraSpinFlat{to{transform:translate(-50%,-50%) rotate(360deg)}}@keyframes upFrameGlow{50%{border-color:rgba(0,255,168,.34);box-shadow:inset 0 0 42px #000,0 0 26px rgba(0,217,255,.2)}}@keyframes upEnergyLine{to{background-position:240% 0}}
           .autoSsActions .extensionButton{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 20px;border:1px solid #586472;border-radius:10px;color:#d9dee4;background:#242c36;font-size:9px;font-weight:900;text-decoration:none}
           .ssThumbnailButton img{display:block;width:100%;height:115px;object-fit:cover;object-position:top center;background:#05090c}
           .ssThumbnailButton span{position:absolute;right:7px;bottom:7px;padding:5px 8px;border-radius:5px;color:#ffe394;background:rgba(5,8,10,.88);font-size:7px;font-weight:900;letter-spacing:.04em;box-shadow:0 3px 12px #000}
