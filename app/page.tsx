@@ -343,6 +343,7 @@ function Field({
 
 export default function Home() {
   const [kind, setKind] = useState<Kind>("kemenangan");
+  const [kindLoaded, setKindLoaded] = useState(false);
   const [form, setForm] = useState<FormState>(initial);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
@@ -415,6 +416,9 @@ export default function Home() {
   } | null>(null);
 
   useEffect(() => {
+    const savedKind = localStorage.getItem("premankaro-active-menu");
+    if (savedKind && kinds.some((item) => item.id === savedKind))
+      setKind(savedKind as Kind);
     const saved = localStorage.getItem("prompt-history");
     if (saved) setHistory(JSON.parse(saved));
     const savedThemeVersion = localStorage.getItem("premankaro-theme-version");
@@ -465,6 +469,7 @@ export default function Home() {
     }
     setRgbLoaded(true);
     setMonitorLoaded(true);
+    setKindLoaded(true);
   }, []);
 
   const loadMonitor = async (shift = monitorShift) => {
@@ -864,6 +869,11 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("premankaro-display-mode", displayMode);
   }, [displayMode]);
+
+  useEffect(() => {
+    if (!kindLoaded) return;
+    localStorage.setItem("premankaro-active-menu", kind);
+  }, [kind, kindLoaded]);
 
   useEffect(() => {
     const syncClock = () => setUsdtDateTime(getAutomaticDateTime());
