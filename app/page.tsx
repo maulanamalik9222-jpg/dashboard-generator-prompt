@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "./auth-gate";
 
 type Kind =
@@ -376,7 +376,7 @@ export default function Home() {
   const [footballCopied, setFootballCopied] = useState(false);
   const [monitorRaw, setMonitorRaw] = useState("");
   const [monitorInterval, setMonitorInterval] = useState(30);
-  const [monitorAuto, setMonitorAuto] = useState(false);
+  const [monitorAuto] = useState(true);
   const [monitorResults, setMonitorResults] = useState<LinkCheckResult[]>([]);
   const [monitorChecking, setMonitorChecking] = useState(false);
   const [monitorError, setMonitorError] = useState("");
@@ -395,6 +395,18 @@ export default function Home() {
   const [monitorSearch, setMonitorSearch] = useState("");
   const [monitorLoaded, setMonitorLoaded] = useState(false);
   const [monitorServerReady, setMonitorServerReady] = useState(false);
+  const [monitorExtensionReady, setMonitorExtensionReady] = useState(false);
+  const [monitorExtensionProgress, setMonitorExtensionProgress] = useState("");
+  const monitorCaptureResolvers = useRef(
+    new Map<
+      string,
+      {
+        resolve: (value: any) => void;
+        reject: (reason: Error) => void;
+        timer: number;
+      }
+    >(),
+  );
   const [monitorPreview, setMonitorPreview] = useState<{
     id: string;
     name: string;
@@ -484,7 +496,99 @@ export default function Home() {
     }
   };
 
-  const checkLinks = async (onlyUrl?: string) => {
+  useEffect(() => {
+    const receiveExtensionMessage = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      const message = event.data;
+      if (!message || message.source !== "PREMANKARO_EXTENSION") return;
+      if (message.type === "PONG") {
+        setMonitorExtensionReady(true);
+        return;
+      }
+      if (message.type !== "CAPTURE_RESULT" || !message.requestId) return;
+      const pending = monitorCaptureResolvers.current.get(message.requestId);
+      if (!pending) return;
+      window.clearTimeout(pending.timer);
+      monitorCaptureResolvers.current.delete(message.requestId);
+      if (message.ok) pending.resolve(message.result);
+      else
+        pending.reject(
+          new Error(message.error || "Extension gagal mengambil screenshot."),
+        );
+    };
+    window.addEventListener("message", receiveExtensionMessage);
+    const ping = () =>
+      window.postMessage(
+        { source: "PREMANKARO_DASHBOARD", type: "PING" },
+        window.location.origin,
+      );
+    ping();
+    const pingTimer = window.setInterval(ping, 3_000);
+    return () => {
+      window.removeEventListener("message", receiveExtensionMessage);
+      window.clearInterval(pingTimer);
+    };
+  }, []);
+
+  const captureWithExtension = (
+    category: MonitorCategory,
+    shift: "pagi" | "malam",
+  ) =>
+    new Promise<any>((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      const timer = window.setTimeout(() => {
+        monitorCaptureResolvers.current.delete(requestId);
+        reject(new Error("Extension tidak merespons dalam 90 detik."));
+      }, 90_000);
+      monitorCaptureResolvers.current.set(requestId, {
+        resolve,
+        reject,
+        timer,
+      });
+      window.postMessage(
+        {
+          source: "PREMANKARO_DASHBOARD",
+          type: "CAPTURE_PAGE",
+          requestId,
+          category: {
+            id: category.id,
+            name: category.name,
+            url: category.url,
+          },
+          shift,
+        },
+        window.location.origin,
+      );
+    });
+
+  const saveExtensionScreenshot = async (
+    category: MonitorCategory,
+    capture: any,
+    shift: "pagi" | "malam",
+  ) => {
+    const response = await fetch("/api/site-monitor", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "save-extension-screenshot",
+        categoryId: category.id,
+        shift,
+        imageBase64: String(capture.dataUrl || "").split(",")[1] || "",
+        finalUrl: String(capture.finalUrl || category.url),
+        title: String(capture.title || ""),
+        challenge: Boolean(capture.challenge),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "Screenshot gagal disimpan.");
+  };
+
+  const checkLinks = async (
+    onlyUrl?: string,
+    forcedShift?: "pagi" | "malam",
+  ) => {
+    const selectedShift = forcedShift || monitorShift;
     const category = onlyUrl
       ? monitorCategories.find((item) => item.url === onlyUrl)
       : undefined;
@@ -498,24 +602,48 @@ export default function Home() {
     setMonitorChecking(true);
     setMonitorError("");
     try {
+      if (monitorExtensionReady) {
+        const targets = category
+          ? [category]
+          : monitorCategories.filter((item) => item.active && item.url.trim());
+        const failures: string[] = [];
+        for (let index = 0; index < targets.length; index += 1) {
+          const target = targets[index];
+          setMonitorExtensionProgress(
+            `${index + 1}/${targets.length} · ${target.name}`,
+          );
+          try {
+            const capture = await captureWithExtension(target, selectedShift);
+            await saveExtensionScreenshot(target, capture, selectedShift);
+          } catch (error) {
+            failures.push(
+              `${target.name}: ${error instanceof Error ? error.message : "gagal"}`,
+            );
+          }
+        }
+        await loadMonitor(selectedShift);
+        if (failures.length) setMonitorError(failures.join(" | "));
+        return;
+      }
       const response = await fetch("/api/site-monitor", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "run",
-          shift: monitorShift,
+          shift: selectedShift,
           categoryId: category?.id,
         }),
       });
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error || "Screenshot situs gagal.");
-      await loadMonitor(monitorShift);
+      await loadMonitor(selectedShift);
     } catch (error) {
       setMonitorError(
         error instanceof Error ? error.message : "Pengecekan link gagal.",
       );
     } finally {
+      setMonitorExtensionProgress("");
       setMonitorChecking(false);
     }
   };
@@ -596,13 +724,36 @@ export default function Home() {
   ]);
 
   useEffect(() => {
-    if (!monitorAuto || kind !== "monitor") return;
-    const timer = window.setInterval(
-      () => checkLinks(),
-      Math.max(1, monitorInterval) * 60_000,
-    );
+    if (!monitorAuto || kind !== "monitor" || !monitorExtensionReady) return;
+    const runScheduledShift = () => {
+      const nowParts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Jakarta",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(new Date());
+      const hour = Number(
+        nowParts.find((part) => part.type === "hour")?.value || "0",
+      );
+      const shift: "pagi" | "malam" | null =
+        hour >= 21 ? "malam" : hour >= 9 ? "pagi" : null;
+      if (!shift) return;
+      const key = `premankaro-auto-ss-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })}-${shift}`;
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, new Date().toISOString());
+      setMonitorShift(shift);
+      checkLinks(undefined, shift).catch(() => localStorage.removeItem(key));
+    };
+    runScheduledShift();
+    const timer = window.setInterval(runScheduledShift, 30_000);
     return () => window.clearInterval(timer);
-  }, [monitorAuto, monitorInterval, kind, monitorCategories]);
+  }, [
+    monitorAuto,
+    kind,
+    monitorExtensionReady,
+    monitorCategories,
+    monitorChecking,
+  ]);
 
   useEffect(() => {
     const clearOldDailyResults = () => {
@@ -1039,9 +1190,13 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="autoSsActions">
-                    <button className="extensionButton" disabled>
-                      BROWSER RUN AKTIF
-                    </button>
+                    <a
+                      className="extensionButton"
+                      href="/premankaro-auto-ss-extension.zip"
+                      download
+                    >
+                      DOWNLOAD EXTENSION
+                    </a>
                     <button onClick={() => setMonitorLoginOpen(true)}>
                       {monitorLoginReady ? "LOGIN SIAP" : "LOGIN"}
                     </button>
@@ -1050,7 +1205,9 @@ export default function Home() {
                       onClick={() => checkLinks()}
                       disabled={monitorChecking}
                     >
-                      {monitorChecking ? "MEMERIKSA..." : "SS SEMUA"}
+                      {monitorChecking
+                        ? monitorExtensionProgress || "MEMERIKSA..."
+                        : "SS SEMUA"}
                     </button>
                     <button onClick={() => setMonitorSettingsOpen(true)}>
                       ATUR LINK
@@ -1061,7 +1218,9 @@ export default function Home() {
                     <button onClick={deleteMonitorResults}>HAPUS HASIL</button>
                   </div>
                   <div className="extensionStatus">
-                    ● CLOUDFLARE BROWSER RUN · TANPA EXTENSION
+                    {monitorExtensionReady
+                      ? "● EXTENSION CHROME AKTIF · SCREENSHOT BROWSER NORMAL"
+                      : "○ EXTENSION BELUM AKTIF · BROWSER RUN SEBAGAI CADANGAN"}
                   </div>
                   <div className="autoSsFilter">
                     <label>
@@ -2190,6 +2349,7 @@ export default function Home() {
         </section>
         <style>{`
           .ssThumbnailButton{position:relative;display:block;width:100%;max-width:100%;padding:0;overflow:hidden;border:1px solid rgba(104,224,183,.5);border-radius:9px;background:#03090c;cursor:zoom-in}
+          .autoSsActions .extensionButton{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 20px;border:1px solid #586472;border-radius:10px;color:#d9dee4;background:#242c36;font-size:9px;font-weight:900;text-decoration:none}
           .ssThumbnailButton img{display:block;width:100%;height:115px;object-fit:cover;object-position:top center;background:#05090c}
           .ssThumbnailButton span{position:absolute;right:7px;bottom:7px;padding:5px 8px;border-radius:5px;color:#ffe394;background:rgba(5,8,10,.88);font-size:7px;font-weight:900;letter-spacing:.04em;box-shadow:0 3px 12px #000}
           .autoSsCardFoot{gap:6px}.autoSsCardFoot small{margin-right:auto}.autoSsCardFoot .viewSsButton{color:#dfffee;border-color:#42b98a;background:#103d30}

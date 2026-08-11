@@ -516,6 +516,72 @@ export async function POST(request: Request) {
     await runtime().DB.batch(statements);
     return json({ ok: true });
   }
+  if (action === "save-extension-screenshot") {
+    if (auth.internal) return json({ error: "Aksi tidak diizinkan." }, 403);
+    const categoryId = String(body.categoryId || "");
+    const shift = body.shift === "malam" ? "malam" : "pagi";
+    const imageText = String(body.imageBase64 || "");
+    const category = await runtime()
+      .DB.prepare(
+        "SELECT id,url FROM monitor_categories WHERE id=? AND active=1",
+      )
+      .bind(categoryId)
+      .first<{ id: string; url: string }>();
+    if (!category) return json({ error: "Kategori tidak ditemukan." }, 404);
+    if (!imageText || imageText.length > 2_600_000)
+      return json({ error: "Data screenshot terlalu besar atau kosong." }, 400);
+    let bytes: Uint8Array;
+    try {
+      bytes = base64ToBytes(imageText);
+    } catch {
+      return json({ error: "Format screenshot tidak valid." }, 400);
+    }
+    if (
+      bytes.byteLength < 100 ||
+      bytes.byteLength > 1_850_000 ||
+      bytes[0] !== 0xff ||
+      bytes[1] !== 0xd8
+    )
+      return json(
+        {
+          error:
+            "Screenshot harus berupa JPEG valid dengan ukuran maksimal 1,85 MB.",
+        },
+        400,
+      );
+    const id = crypto.randomUUID();
+    const checkedAt = Date.now();
+    const challenge = Boolean(body.challenge);
+    const finalUrl = String(body.finalUrl || category.url).slice(0, 2_000);
+    const image = bytes.slice().buffer as ArrayBuffer;
+    await runtime()
+      .DB.prepare(
+        `INSERT INTO monitor_screenshots
+      (id,category_id,day,shift,image,mime,status,http_status,final_url,message,checked_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(category_id,day,shift) DO UPDATE SET
+      id=excluded.id,image=excluded.image,mime=excluded.mime,status=excluded.status,
+      http_status=excluded.http_status,final_url=excluded.final_url,
+      message=excluded.message,checked_at=excluded.checked_at`,
+      )
+      .bind(
+        id,
+        categoryId,
+        wibDay(),
+        shift,
+        image,
+        "image/jpeg",
+        challenge ? "problem" : "safe",
+        challenge ? 403 : 200,
+        finalUrl,
+        challenge
+          ? "Halaman verifikasi manusia terdeteksi oleh extension."
+          : `Screenshot Chrome berhasil${body.title ? ` · ${String(body.title).slice(0, 180)}` : ""}`,
+        checkedAt,
+      )
+      .run();
+    return json({ ok: true, id, checkedAt, challenge });
+  }
   if (action === "run" || action === "run-scheduled") {
     const shift = body.shift === "malam" ? "malam" : "pagi";
     const results = await runChecks(
