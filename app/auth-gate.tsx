@@ -80,9 +80,17 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     const open = () => {
       if (user?.role === "admin") loadUsers();
     };
+    const close = () => {
+      setManagementOpen(false);
+      setEditor(null);
+      setManagementError("");
+    };
     window.addEventListener("premankaro:open-user-management", open);
-    return () =>
+    window.addEventListener("premankaro:close-user-management", close);
+    return () => {
       window.removeEventListener("premankaro:open-user-management", open);
+      window.removeEventListener("premankaro:close-user-management", close);
+    };
   }, [user]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {

@@ -1074,7 +1074,12 @@ export default function Home() {
                 <button
                   key={item.id}
                   className={kind === item.id ? "navItem active" : "navItem"}
-                  onClick={() => setKind(item.id)}
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new Event("premankaro:close-user-management"),
+                    );
+                    setKind(item.id);
+                  }}
                 >
                   <i>{item.icon}</i>
                   <span>
@@ -1090,7 +1095,12 @@ export default function Home() {
                 <button
                   key={item.id}
                   className={kind === item.id ? "navItem active" : "navItem"}
-                  onClick={() => setKind(item.id)}
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new Event("premankaro:close-user-management"),
+                    );
+                    setKind(item.id);
+                  }}
                 >
                   <i>{item.icon}</i>
                   <span>
