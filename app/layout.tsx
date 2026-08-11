@@ -1,16 +1,18 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "PREMANKARO | DASHBOARD",
-  description: "Dashboard internal Preman Karo",
+  title: "TEAM UP | DASHBOARD",
+  description: "Dashboard internal Team UP",
   icons: {
-    icon: [{ url: "/premankaro-favicon-v1.png", type: "image/png" }],
-    shortcut: "/premankaro-favicon-v1.png",
-    apple: "/premankaro-favicon-v1.png",
+    icon: [{ url: "/logo-up-premium-transparent.png", type: "image/png" }],
+    shortcut: "/logo-up-premium-transparent.png",
+    apple: "/logo-up-premium-transparent.png",
   },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="id">
       <body>{children}</body>
