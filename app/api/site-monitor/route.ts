@@ -6,6 +6,7 @@ type RuntimeEnv = {
   DB: D1Database;
   BROWSER: Fetcher;
   SITE_CREDENTIAL_KEY?: string;
+  MONITOR_BYPASS_TOKEN?: string;
 };
 
 type CategoryInput = {
@@ -230,6 +231,15 @@ async function captureCategory(
     const url = normalizeUrl(String(category.url));
     page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 820, deviceScaleFactor: 1 });
+    // Jalur resmi untuk situs milik sendiri. Domain tujuan harus mempunyai
+    // WAF Skip Rule yang memverifikasi nilai header ini. Token hanya berada
+    // di Worker dan tidak pernah dikirim ke browser pengguna dashboard.
+    const bypassToken = runtime().MONITOR_BYPASS_TOKEN?.trim();
+    if (bypassToken) {
+      await page.setExtraHTTPHeaders({
+        "x-premankaro-monitor": bypassToken,
+      });
+    }
     const response = await page.goto(url, {
       waitUntil: "networkidle2",
       timeout: 25_000,
