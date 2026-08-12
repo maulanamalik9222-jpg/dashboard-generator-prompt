@@ -15,16 +15,19 @@ const json = (data: unknown, status = 200, headers?: HeadersInit) =>
 const emailValid = (email: string) => /^\S+@\S+\.\S+$/.test(email);
 const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor"] as const;
 async function ensureMenuAccessTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_menu_access (user_id TEXT NOT NULL,menu_id TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,updated_at INTEGER NOT NULL,PRIMARY KEY (user_id,menu_id))`).run()}
-async function menuAccessFor(userId:string,role:string){if(role==="admin")return [...MENU_IDS];await ensureMenuAccessTable();const rows=await db().prepare("SELECT menu_id,enabled FROM user_menu_access WHERE user_id=?").bind(userId).all<{menu_id:string;enabled:number}>();if(!rows.results.length)return [...MENU_IDS];return rows.results.filter(row=>Number(row.enabled)===1).map(row=>row.menu_id).filter(id=>MENU_IDS.includes(id as (typeof MENU_IDS)[number]))}
+async function ensureStaffRoleTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_staff_roles (user_id TEXT PRIMARY KEY,staff_role TEXT NOT NULL DEFAULT 'staff' CHECK(staff_role IN ('assistant','staff')),updated_at INTEGER NOT NULL)`).run()}
+async function staffRoleFor(userId:string,role:string){if(role==="admin")return "master";await ensureStaffRoleTable();const row=await db().prepare("SELECT staff_role FROM user_staff_roles WHERE user_id=?").bind(userId).first<{staff_role:string}>();return row?.staff_role==="assistant"?"assistant":"staff"}
+async function menuAccessFor(userId:string,role:string){if(role==="admin"||(await staffRoleFor(userId,role))==="assistant")return [...MENU_IDS];await ensureMenuAccessTable();const rows=await db().prepare("SELECT menu_id,enabled FROM user_menu_access WHERE user_id=?").bind(userId).all<{menu_id:string;enabled:number}>();if(!rows.results.length)return [...MENU_IDS];return rows.results.filter(row=>Number(row.enabled)===1).map(row=>row.menu_id).filter(id=>MENU_IDS.includes(id as (typeof MENU_IDS)[number]))}
 
 export async function GET(req: Request) {
   const user = await currentUser(req);
-  if(user){const access=await menuAccessFor(user.id,user.role);return json({
+  if(user){const staffRole=await staffRoleFor(user.id,user.role);const access=await menuAccessFor(user.id,user.role);return json({
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
+          staffRole,
           access,
         },
         expiresAt: user.expires_at,
@@ -113,8 +116,9 @@ export async function POST(req: Request) {
   }
 
   const master = await currentUser(req);
-  if (!master || master.role !== "admin")
-    return json({ error: "Hanya master yang dapat mengelola pengguna." }, 403);
+  const operatorStaffRole=master?await staffRoleFor(master.id,master.role):"staff";
+  if (!master || (master.role !== "admin" && operatorStaffRole !== "assistant"))
+    return json({ error: "Hanya master atau asisten master yang dapat mengelola pengguna." }, 403);
 
   if (action === "list-users") {
     await ensureMenuAccessTable();
@@ -123,8 +127,8 @@ export async function POST(req: Request) {
         "SELECT id,name,email,role,status,created_at FROM users ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END, created_at DESC",
       )
       .all();
-    const users=await Promise.all((result.results as any[]).map(async listedUser=>({...listedUser,access:await menuAccessFor(listedUser.id,listedUser.role)})));
-    return json({ users });
+    const users=await Promise.all((result.results as any[]).map(async listedUser=>({...listedUser,staffRole:await staffRoleFor(listedUser.id,listedUser.role),access:await menuAccessFor(listedUser.id,listedUser.role)})));
+    return json({ users, canSetRole: master.role==="admin" });
   }
 
   const targetId = String(body.id || "");
@@ -135,8 +139,8 @@ export async function POST(req: Request) {
         .first<any>()
     : null;
   if (!target) return json({ error: "Pengguna tidak ditemukan." }, 404);
-  if (target.role === "admin" && target.id !== master.id)
-    return json({ error: "Akun master lain tidak dapat diubah." }, 403);
+  if (target.role === "admin")
+    return json({ error: "Akun master tidak dapat diubah dari panel ini." }, 403);
 
   if (action === "update-user") {
     if (target.id === master.id)
@@ -152,6 +156,7 @@ export async function POST(req: Request) {
         .prepare("UPDATE users SET name=?,email=? WHERE id=?")
         .bind(name, email, target.id)
         .run();
+      if(master.role==="admin"&&body.staffRole){await ensureStaffRoleTable();const nextRole=body.staffRole==="assistant"?"assistant":"staff";await db().prepare("INSERT INTO user_staff_roles(user_id,staff_role,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET staff_role=excluded.staff_role,updated_at=excluded.updated_at").bind(target.id,nextRole,Date.now()).run()}
       if(Array.isArray(body.access)){await ensureMenuAccessTable();const allowed=new Set(body.access.map((value:unknown)=>String(value)).filter((id:string)=>MENU_IDS.includes(id as (typeof MENU_IDS)[number])));await db().prepare("DELETE FROM user_menu_access WHERE user_id=?").bind(target.id).run();for(const menuId of MENU_IDS){await db().prepare("INSERT INTO user_menu_access(user_id,menu_id,enabled,updated_at) VALUES(?,?,?,?)").bind(target.id,menuId,allowed.has(menuId)?1:0,Date.now()).run()}}
       return json({ ok: true });
     } catch {
@@ -232,6 +237,8 @@ export async function POST(req: Request) {
       .run();
     await ensureMenuAccessTable();
     await db().prepare("DELETE FROM user_menu_access WHERE user_id=?").bind(target.id).run();
+    await ensureStaffRoleTable();
+    await db().prepare("DELETE FROM user_staff_roles WHERE user_id=?").bind(target.id).run();
     await db().prepare("DELETE FROM users WHERE id=?").bind(target.id).run();
     return json({ ok: true });
   }

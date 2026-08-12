@@ -345,6 +345,7 @@ export default function Home() {
   const [kind, setKind] = useState<Kind>("kemenangan");
   const [kindLoaded, setKindLoaded] = useState(false);
   const [isMaster, setIsMaster] = useState(false);
+  const [canManageUsers, setCanManageUsers] = useState(false);
   const [allowedMenus, setAllowedMenus] = useState<Kind[]>(kinds.map(item=>item.id));
   const [form, setForm] = useState<FormState>(initial);
   const [copied, setCopied] = useState(false);
@@ -478,8 +479,8 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/auth", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {const master=data?.user?.role==="admin";setIsMaster(master);const access=Array.isArray(data?.user?.access)?data.user.access.filter((id:string)=>kinds.some(item=>item.id===id)):kinds.map(item=>item.id);setAllowedMenus(master?kinds.map(item=>item.id):access)})
-      .catch(() => {setIsMaster(false);setAllowedMenus([])});
+      .then((data) => {const master=data?.user?.role==="admin";const assistant=data?.user?.staffRole==="assistant";setIsMaster(master||assistant);setCanManageUsers(master||assistant);const access=Array.isArray(data?.user?.access)?data.user.access.filter((id:string)=>kinds.some(item=>item.id===id)):kinds.map(item=>item.id);setAllowedMenus(master||assistant?kinds.map(item=>item.id):access)})
+      .catch(() => {setIsMaster(false);setCanManageUsers(false);setAllowedMenus([])});
   }, []);
 
   useEffect(()=>{if(isMaster||allowedMenus.includes(kind))return;const firstAllowed=kinds.find(item=>allowedMenus.includes(item.id));if(firstAllowed)setKind(firstAllowed.id)},[allowedMenus,isMaster,kind]);
@@ -1113,7 +1114,7 @@ export default function Home() {
                 </button>
               ))}
             </nav>
-            {isMaster && (
+            {canManageUsers && (
               <>
                 <p className="navLabel shortcutLabel">MASTER</p>
                 <nav>
