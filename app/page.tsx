@@ -380,7 +380,10 @@ export default function Home() {
   const [footballCopied, setFootballCopied] = useState(false);
   const [monitorRaw, setMonitorRaw] = useState("");
   const [monitorInterval, setMonitorInterval] = useState(30);
-  const [monitorAuto] = useState(true);
+  const [monitorAuto, setMonitorAuto] = useState(false);
+  const [monitorIntervalUnit, setMonitorIntervalUnit] = useState<"minute" | "hour">("minute");
+  const [monitorNextRunAt, setMonitorNextRunAt] = useState("");
+  const [monitorScheduleSaved, setMonitorScheduleSaved] = useState(false);
   const [monitorResults, setMonitorResults] = useState<LinkCheckResult[]>([]);
   const [monitorChecking, setMonitorChecking] = useState(false);
   const [monitorError, setMonitorError] = useState("");
@@ -460,6 +463,10 @@ export default function Home() {
         if (typeof monitor.raw === "string") setMonitorRaw(monitor.raw);
         if (Number(monitor.interval) >= 1)
           setMonitorInterval(Number(monitor.interval));
+        if (monitor.intervalUnit === "hour") setMonitorIntervalUnit("hour");
+        setMonitorAuto(Boolean(monitor.auto));
+        if (typeof monitor.nextRunAt === "string")
+          setMonitorNextRunAt(monitor.nextRunAt);
         if (Array.isArray(monitor.categories))
           setMonitorCategories(monitor.categories);
         if (
@@ -675,6 +682,7 @@ export default function Home() {
         }
       }
       await loadMonitor(selectedShift);
+      setMonitorLastChecked(new Date().toISOString());
       if (failures.length) setMonitorError(failures.join(" | "));
     } catch (error) {
       setMonitorError(
@@ -747,6 +755,9 @@ export default function Home() {
       JSON.stringify({
         raw: monitorRaw,
         interval: monitorInterval,
+        intervalUnit: monitorIntervalUnit,
+        auto: monitorAuto,
+        nextRunAt: monitorNextRunAt,
         categories: monitorCategories,
         day: getAutomaticDate(),
         results: monitorResults,
@@ -757,41 +768,68 @@ export default function Home() {
     monitorLoaded,
     monitorRaw,
     monitorInterval,
+    monitorIntervalUnit,
+    monitorAuto,
+    monitorNextRunAt,
     monitorCategories,
     monitorResults,
     monitorLastChecked,
   ]);
 
+  const monitorIntervalMs = () =>
+    Math.max(1, monitorInterval) *
+    (monitorIntervalUnit === "hour" ? 3_600_000 : 60_000);
+
+  const saveMonitorSchedule = () => {
+    if (!Number.isFinite(monitorInterval) || monitorInterval < 1) {
+      setMonitorError("Interval minimal 1 menit atau 1 jam.");
+      return;
+    }
+    const next = monitorAuto
+      ? new Date(Date.now() + monitorIntervalMs()).toISOString()
+      : "";
+    setMonitorNextRunAt(next);
+    setMonitorScheduleSaved(true);
+    setMonitorError("");
+    window.setTimeout(() => setMonitorScheduleSaved(false), 2200);
+  };
+
   useEffect(() => {
-    if (!monitorAuto || kind !== "monitor" || !monitorExtensionReady) return;
-    const runScheduledShift = () => {
-      const nowParts = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Jakarta",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).formatToParts(new Date());
-      const hour = Number(
-        nowParts.find((part) => part.type === "hour")?.value || "0",
+    if (!monitorLoaded || !monitorAuto) return;
+    if (!monitorNextRunAt) {
+      setMonitorNextRunAt(
+        new Date(Date.now() + monitorIntervalMs()).toISOString(),
       );
-      const shift: "pagi" | "malam" | null =
-        hour >= 21 ? "malam" : hour >= 9 ? "pagi" : null;
-      if (!shift) return;
-      const key = `premankaro-auto-ss-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })}-${shift}`;
-      if (localStorage.getItem(key)) return;
-      localStorage.setItem(key, new Date().toISOString());
-      setMonitorShift(shift);
-      checkLinks(undefined, shift).catch(() => localStorage.removeItem(key));
+      return;
+    }
+    const runIfDue = () => {
+      if (
+        kind !== "monitor" ||
+        !monitorExtensionReady ||
+        monitorChecking ||
+        monitorRunLock.current ||
+        Date.now() < new Date(monitorNextRunAt).getTime()
+      )
+        return;
+      // Jadwalkan pemeriksaan berikutnya sebelum mulai agar tidak terpanggil dua kali.
+      setMonitorNextRunAt(
+        new Date(Date.now() + monitorIntervalMs()).toISOString(),
+      );
+      checkLinks(undefined, monitorShift);
     };
-    runScheduledShift();
-    const timer = window.setInterval(runScheduledShift, 30_000);
+    runIfDue();
+    const timer = window.setInterval(runIfDue, 5_000);
     return () => window.clearInterval(timer);
   }, [
+    monitorLoaded,
     monitorAuto,
+    monitorNextRunAt,
+    monitorInterval,
+    monitorIntervalUnit,
     kind,
     monitorExtensionReady,
-    monitorCategories,
     monitorChecking,
+    monitorShift,
   ]);
 
   useEffect(() => {
@@ -1322,12 +1360,60 @@ export default function Home() {
                     />
                   </div>
                   <div className="autoSsSchedule">
-                    <label>✓ CEK OTOMATIS</label>
-                    <span>SHIFT PAGI</span>
-                    <strong>09:00 WIB</strong>
-                    <span>SHIFT MALAM</span>
-                    <strong>21:00 WIB</strong>
-                    <b>CRON OTOMATIS AKTIF</b>
+                    <label className="autoSsToggle">
+                      <input
+                        type="checkbox"
+                        checked={monitorAuto}
+                        onChange={(event) => {
+                          const enabled = event.target.checked;
+                          setMonitorAuto(enabled);
+                          setMonitorNextRunAt(
+                            enabled
+                              ? new Date(Date.now() + monitorIntervalMs()).toISOString()
+                              : "",
+                          );
+                        }}
+                      />
+                      <i />
+                      AUTO SS
+                    </label>
+                    <span>SETIAP</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={monitorIntervalUnit === "hour" ? 168 : 10080}
+                      value={monitorInterval}
+                      onChange={(event) =>
+                        setMonitorInterval(Math.max(1, Number(event.target.value) || 1))
+                      }
+                    />
+                    <select
+                      value={monitorIntervalUnit}
+                      onChange={(event) =>
+                        setMonitorIntervalUnit(
+                          event.target.value === "hour" ? "hour" : "minute",
+                        )
+                      }
+                    >
+                      <option value="minute">MENIT</option>
+                      <option value="hour">JAM</option>
+                    </select>
+                    <button type="button" onClick={saveMonitorSchedule}>
+                      {monitorScheduleSaved ? "TERSIMPAN ✓" : "SIMPAN JADWAL"}
+                    </button>
+                    <div className="autoSsScheduleInfo">
+                      <small>
+                        TERAKHIR: {monitorLastChecked
+                          ? new Date(monitorLastChecked).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) + " WIB"
+                          : "BELUM ADA"}
+                      </small>
+                      <small>
+                        BERIKUTNYA: {monitorAuto && monitorNextRunAt
+                          ? new Date(monitorNextRunAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) + " WIB"
+                          : "-"}
+                      </small>
+                    </div>
+                    <b>{monitorAuto ? "OTOMATIS AKTIF" : "OTOMATIS NONAKTIF"}</b>
                   </div>
                 </section>
                 {monitorExtensionWarning && (
@@ -2467,6 +2553,7 @@ export default function Home() {
           @keyframes upLogoFullRotate{0%{transform:translate(-50%,-50%) perspective(1000px) rotateY(0deg) scale(.96);filter:contrast(1.1) saturate(1.25) brightness(1.04) drop-shadow(0 0 12px #00d9ff)}25%{transform:translate(-50%,-50%) perspective(1000px) rotateY(90deg) scale(1);filter:contrast(1.14) saturate(1.38) brightness(1.14) drop-shadow(0 0 18px #ffe600)}50%{transform:translate(-50%,-50%) perspective(1000px) rotateY(180deg) scale(.96);filter:contrast(1.1) saturate(1.25) brightness(1.05) drop-shadow(0 0 13px #00ffa8)}75%{transform:translate(-50%,-50%) perspective(1000px) rotateY(270deg) scale(1);filter:contrast(1.14) saturate(1.38) brightness(1.14) drop-shadow(0 0 18px #00d9ff)}100%{transform:translate(-50%,-50%) perspective(1000px) rotateY(360deg) scale(.96);filter:contrast(1.1) saturate(1.25) brightness(1.04) drop-shadow(0 0 12px #ffe600)}}
           @keyframes upFrameGlow{50%{border-color:rgba(0,255,168,.34);box-shadow:inset 0 0 42px #000,0 0 26px rgba(0,217,255,.2)}}@keyframes upEnergyLine{to{background-position:240% 0}}
           .autoSsActions .extensionButton{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 20px;border:1px solid #586472;border-radius:10px;color:#d9dee4;background:#242c36;font-size:9px;font-weight:900;text-decoration:none}
+          .autoSsSchedule{flex-wrap:wrap;gap:10px}.autoSsSchedule input[type=number]{width:84px}.autoSsSchedule select{min-height:38px;padding:0 34px 0 12px;border:1px solid #4a5664;border-radius:8px;color:#fff;background:#17212d;font-family:"Lexend",Arial,sans-serif;font-size:8px;font-weight:900}.autoSsToggle{cursor:pointer}.autoSsToggle input{position:absolute;opacity:0;pointer-events:none}.autoSsToggle i{position:relative;width:42px;height:23px;border:1px solid #5c6874;border-radius:99px;background:#24313b;transition:.2s}.autoSsToggle i::after{content:"";position:absolute;left:3px;top:3px;width:15px;height:15px;border-radius:50%;background:#8998a1;transition:.2s}.autoSsToggle input:checked+i{border-color:#31e5ab;background:#126a54;box-shadow:0 0 16px rgba(49,229,171,.25)}.autoSsToggle input:checked+i::after{transform:translateX(19px);background:#45ffc0;box-shadow:0 0 9px #45ffc0}.autoSsScheduleInfo{display:flex;flex-wrap:wrap;gap:6px 16px;min-width:280px}.autoSsScheduleInfo small{color:#9bacb5;font-size:7px;font-weight:800}.autoSsSchedule>button{min-width:126px}.autoSsSchedule>b{min-width:132px;text-align:right}.autoSsSchedule:has(.autoSsToggle input:not(:checked))>b{color:#ff7d8c}.autoSsSchedule:has(.autoSsToggle input:checked)>b{color:#56e4a7}
           .extensionWarningBackdrop{position:fixed;z-index:10050;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.78);backdrop-filter:blur(8px)}
           .extensionWarningBox{position:relative;width:min(460px,94vw);padding:28px 32px 30px;border:1px solid rgba(255,214,91,.45);border-radius:20px;text-align:center;color:#fff;background:radial-gradient(circle at 50% 0,rgba(255,215,86,.12),transparent 38%),linear-gradient(145deg,#121d28,#071019);box-shadow:0 30px 100px #000,0 0 36px rgba(255,210,66,.1)}
           .extensionWarningIcon{width:54px;height:54px;margin:0 auto 14px;display:grid;place-items:center;border:1px solid #d6ae4d;border-radius:15px;color:#ffe18a;background:linear-gradient(145deg,rgba(209,161,54,.25),rgba(255,220,111,.07));box-shadow:0 0 24px rgba(255,210,66,.13);font-size:25px;font-weight:900}
