@@ -13,7 +13,7 @@ const json = (data: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(data, { status, headers });
 
 const emailValid = (email: string) => /^\S+@\S+\.\S+$/.test(email);
-const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor"] as const;
+const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor","handover"] as const;
 async function ensureMenuAccessTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_menu_access (user_id TEXT NOT NULL,menu_id TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,updated_at INTEGER NOT NULL,PRIMARY KEY (user_id,menu_id))`).run()}
 async function ensureStaffRoleTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_staff_roles (user_id TEXT PRIMARY KEY,staff_role TEXT NOT NULL DEFAULT 'staff' CHECK(staff_role IN ('assistant','staff')),updated_at INTEGER NOT NULL)`).run()}
 async function staffRoleFor(userId:string,role:string){if(role==="admin")return "master";await ensureStaffRoleTable();const row=await db().prepare("SELECT staff_role FROM user_staff_roles WHERE user_id=?").bind(userId).first<{staff_role:string}>();return row?.staff_role==="assistant"?"assistant":"staff"}

@@ -12,7 +12,10 @@ type Kind =
   | "usdt"
   | "result"
   | "bola"
-  | "monitor";
+  | "monitor"
+  | "handover";
+type HandoverShift = "pagi" | "malam";
+type HandoverEntry = { id: string; content: string };
 type FootballMatch = {
   time: string;
   date: string;
@@ -140,6 +143,12 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
     label: "Cek Link Situs Otomatis",
     icon: "▣",
     hint: "Pengecekan kategori dua shift",
+  },
+  {
+    id: "handover",
+    label: "Data Serah Terima",
+    icon: "⇄",
+    hint: "Catatan serah terima dua shift",
   },
 ];
 
@@ -405,6 +414,13 @@ export default function Home() {
   const [monitorExtensionReady, setMonitorExtensionReady] = useState(false);
   const [monitorExtensionWarning, setMonitorExtensionWarning] = useState(false);
   const [monitorExtensionProgress, setMonitorExtensionProgress] = useState("");
+  const [handoverShift, setHandoverShift] = useState<HandoverShift>("pagi");
+  const [handoverDraft, setHandoverDraft] = useState("");
+  const [handoverData, setHandoverData] = useState<
+    Record<HandoverShift, HandoverEntry[]>
+  >({ pagi: [], malam: [] });
+  const [handoverLoaded, setHandoverLoaded] = useState(false);
+  const [handoverCopied, setHandoverCopied] = useState(false);
   const monitorCaptureResolvers = useRef(
     new Map<
       string,
@@ -435,6 +451,7 @@ export default function Home() {
         : null;
     const savedMode = localStorage.getItem("premankaro-display-mode");
     const savedMonitor = localStorage.getItem("premankaro-link-monitor");
+    const savedHandover = localStorage.getItem("premankaro-handover-data");
     if (savedMode === "light" || savedMode === "dark")
       setDisplayMode(savedMode);
     if (savedRgb) {
@@ -478,6 +495,16 @@ export default function Home() {
         }
       } catch {}
     }
+    if (savedHandover) {
+      try {
+        const parsed = JSON.parse(savedHandover);
+        setHandoverData({
+          pagi: Array.isArray(parsed?.pagi) ? parsed.pagi : [],
+          malam: Array.isArray(parsed?.malam) ? parsed.malam : [],
+        });
+      } catch {}
+    }
+    setHandoverLoaded(true);
     setRgbLoaded(true);
     setMonitorLoaded(true);
     setKindLoaded(true);
@@ -919,6 +946,14 @@ export default function Home() {
   }, [kind, kindLoaded]);
 
   useEffect(() => {
+    if (!handoverLoaded) return;
+    localStorage.setItem(
+      "premankaro-handover-data",
+      JSON.stringify(handoverData),
+    );
+  }, [handoverData, handoverLoaded]);
+
+  useEffect(() => {
     const syncClock = () => setUsdtDateTime(getAutomaticDateTime());
     syncClock();
     const timer = window.setInterval(syncClock, 1_000);
@@ -939,6 +974,56 @@ export default function Home() {
 
   const update = (key: keyof FormState) => (value: string) =>
     setForm((old) => ({ ...old, [key]: value }));
+
+  const currentHandoverEntries = handoverData[handoverShift];
+  const handoverOutput = `SERAH TERIMA SHIFT ${handoverShift.toUpperCase()}${
+    currentHandoverEntries.length
+      ? `\n\n${currentHandoverEntries
+          .map((entry, index) => `${index + 1}. ${entry.content.trim()}`)
+          .join("\n\n")}`
+      : ""
+  }`;
+  const addHandoverEntry = () => {
+    const content = handoverDraft.trim();
+    if (!content) return;
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    setHandoverData((old) => ({
+      ...old,
+      [handoverShift]: [...old[handoverShift], { id, content }],
+    }));
+    setHandoverDraft("");
+    setHandoverCopied(false);
+  };
+  const updateHandoverEntry = (id: string, content: string) =>
+    setHandoverData((old) => ({
+      ...old,
+      [handoverShift]: old[handoverShift].map((entry) =>
+        entry.id === id ? { ...entry, content } : entry,
+      ),
+    }));
+  const removeHandoverEntry = (id: string) =>
+    setHandoverData((old) => ({
+      ...old,
+      [handoverShift]: old[handoverShift].filter((entry) => entry.id !== id),
+    }));
+  const moveHandoverEntry = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= currentHandoverEntries.length) return;
+    setHandoverData((old) => {
+      const entries = [...old[handoverShift]];
+      [entries[index], entries[target]] = [entries[target], entries[index]];
+      return { ...old, [handoverShift]: entries };
+    });
+  };
+  const copyHandover = async () => {
+    if (!currentHandoverEntries.length) return;
+    await navigator.clipboard.writeText(handoverOutput);
+    setHandoverCopied(true);
+    window.setTimeout(() => setHandoverCopied(false), 1800);
+  };
 
   const updateUsdtBlock = (value: string) => {
     setUsdtRaw(value);
@@ -1187,6 +1272,8 @@ export default function Home() {
               <p className="sub">
                 {kind === "monitor"
                   ? "Kelola kategori, login terenkripsi, dan screenshot otomatis untuk dua shift."
+                  : kind === "handover"
+                    ? "Susun catatan serah terima shift, revisi setiap nomor, lalu salin seluruh hasil."
                   : "Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda."}
               </p>
             </div>
@@ -1275,6 +1362,8 @@ export default function Home() {
             className={
               kind === "monitor"
                 ? "grid monitorGrid lexendContent"
+                : kind === "handover"
+                  ? "grid handoverGrid lexendContent"
                 : kind === "bola"
                   ? "grid footballGrid lexendContent"
                   : kind === "validasi"
@@ -1284,7 +1373,128 @@ export default function Home() {
                       : "grid lexendContent"
             }
           >
-            {kind === "monitor" ? (
+            {kind === "handover" ? (
+              <section className="handoverStudio">
+                <section className="panel handoverEditor">
+                  <div className="panelHead">
+                    <div>
+                      <span>01</span>
+                      <h2>Data Serah Terima</h2>
+                    </div>
+                    <button
+                      className="ghost handoverClear"
+                      onClick={() => {
+                        if (!currentHandoverEntries.length) return;
+                        if (window.confirm(`Hapus semua data Shift ${handoverShift.toUpperCase()}?`))
+                          setHandoverData((old) => ({ ...old, [handoverShift]: [] }));
+                      }}
+                    >
+                      Hapus Shift
+                    </button>
+                  </div>
+                  <div className="handoverBody">
+                    <div className="handoverShiftTabs">
+                      {(["pagi", "malam"] as HandoverShift[]).map((shift) => (
+                        <button
+                          key={shift}
+                          className={handoverShift === shift ? "active" : ""}
+                          onClick={() => {
+                            setHandoverShift(shift);
+                            setHandoverCopied(false);
+                          }}
+                        >
+                          SHIFT {shift.toUpperCase()}
+                          <small>{handoverData[shift].length} data</small>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="handoverComposer">
+                      <label>
+                        <span>DATA BERIKUTNYA · NOMOR {currentHandoverEntries.length + 1}</span>
+                        <textarea
+                          rows={9}
+                          value={handoverDraft}
+                          onChange={(event) => setHandoverDraft(event.target.value)}
+                          placeholder={"Contoh:\nPENAMBAHAN REKENING BANK KAS KHUSUS TAMPUNG\n\nBANK BRI\nNAMA REKENING : ...\nNO REKENING : ...\nNO HP : ...\n\nhp sudah diambil dan sudah ready"}
+                        />
+                      </label>
+                      <button
+                        className="primary handoverAdd"
+                        onClick={addHandoverEntry}
+                        disabled={!handoverDraft.trim()}
+                      >
+                        + TAMBAH SEBAGAI NO. {currentHandoverEntries.length + 1}
+                      </button>
+                    </div>
+                    <div className="handoverEntries">
+                      {currentHandoverEntries.length === 0 ? (
+                        <div className="handoverEmpty">
+                          Belum ada data untuk Shift {handoverShift.toUpperCase()}.
+                        </div>
+                      ) : (
+                        currentHandoverEntries.map((entry, index) => (
+                          <article className="handoverEntry" key={entry.id}>
+                            <div className="handoverEntryTop">
+                              <strong>NO. {String(index + 1).padStart(2, "0")}</strong>
+                              <div>
+                                <button
+                                  title="Naikkan urutan"
+                                  disabled={index === 0}
+                                  onClick={() => moveHandoverEntry(index, -1)}
+                                >↑</button>
+                                <button
+                                  title="Turunkan urutan"
+                                  disabled={index === currentHandoverEntries.length - 1}
+                                  onClick={() => moveHandoverEntry(index, 1)}
+                                >↓</button>
+                                <button
+                                  className="danger"
+                                  onClick={() => removeHandoverEntry(entry.id)}
+                                >Hapus</button>
+                              </div>
+                            </div>
+                            <textarea
+                              rows={7}
+                              value={entry.content}
+                              onChange={(event) =>
+                                updateHandoverEntry(entry.id, event.target.value)
+                              }
+                            />
+                            <small>Isi nomor ini tetap dapat direvisi kapan saja.</small>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </section>
+                <section className="panel handoverOutputPanel">
+                  <div className="panelHead">
+                    <div>
+                      <span>02</span>
+                      <h2>Hasil Siap Kirim</h2>
+                    </div>
+                    <span className="live">● LIVE</span>
+                  </div>
+                  <div className="handoverOutput">
+                    <pre>{handoverOutput}</pre>
+                  </div>
+                  <button
+                    className="primary handoverCopy"
+                    onClick={copyHandover}
+                    disabled={!currentHandoverEntries.length}
+                  >
+                    {handoverCopied ? "✓ HASIL TERSALIN" : "SALIN SEMUA HASIL"}
+                  </button>
+                  <div className="quality">
+                    <span>✓</span>
+                    <div>
+                      <b>Nomor tersusun otomatis</b>
+                      <small>Perubahan pada data lama langsung masuk ke hasil.</small>
+                    </div>
+                  </div>
+                </section>
+              </section>
+            ) : kind === "monitor" ? (
               <section className="autoSsStudio">
                 <div className="autoSsTitle">
                   <h1>AUTO SS SITUS</h1>
@@ -2510,6 +2720,7 @@ export default function Home() {
             kind !== "usdt" &&
             kind !== "result" &&
             kind !== "monitor" &&
+            kind !== "handover" &&
             history.length > 0 && (
               <section className="history">
                 <div className="historyTitle">
@@ -2561,6 +2772,7 @@ export default function Home() {
           .ssThumbnailButton img{display:block;width:100%;height:138px;object-fit:cover;object-position:top center;background:#05090c}
           .ssThumbnailButton span{position:absolute;right:7px;bottom:7px;padding:5px 8px;border-radius:5px;color:#ffe394;background:rgba(5,8,10,.88);font-size:7px;font-weight:900;letter-spacing:.04em;box-shadow:0 3px 12px #000}
           .autoSsCardFoot{gap:6px}.autoSsCardFoot small{margin-right:auto}.autoSsCardFoot .viewSsButton{color:#dfffee;border-color:#42b98a;background:#103d30}
+          .handoverGrid{display:block!important;max-width:1460px}.handoverStudio{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(390px,.92fr);gap:18px;align-items:start}.handoverEditor,.handoverOutputPanel{overflow:hidden}.handoverBody{padding:24px}.handoverShiftTabs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}.handoverShiftTabs button{display:flex;align-items:center;justify-content:center;gap:10px;min-height:52px;border:1px solid rgba(0,207,255,.25);border-radius:11px;color:#9eb4ba;background:#071116;font:900 12px "Lexend",Arial,sans-serif}.handoverShiftTabs button small{padding:4px 7px;border-radius:99px;color:#8aa2a8;background:#101e24;font-size:8px}.handoverShiftTabs button.active{border-color:#ffe100;color:#071116;background:linear-gradient(135deg,#fff084,#ffe100);box-shadow:0 10px 28px rgba(255,225,0,.14)}.handoverShiftTabs button.active small{color:#fff;background:#13242b}.handoverComposer{padding:18px;border:1px solid rgba(0,207,255,.2);border-radius:14px;background:rgba(0,8,12,.55)}.handoverComposer label{display:grid;gap:9px}.handoverComposer label>span{color:#62e8ff;font-size:9px;font-weight:900;letter-spacing:.08em}.handoverComposer textarea,.handoverEntry textarea{width:100%;resize:vertical;border:1px solid rgba(0,207,255,.24);border-radius:10px;padding:14px;color:#eafcff;background:#020a0e;font:600 12px/1.65 "Lexend",Arial,sans-serif;outline:none}.handoverComposer textarea:focus,.handoverEntry textarea:focus{border-color:#00d9ff;box-shadow:0 0 0 3px rgba(0,217,255,.08)}.handoverAdd,.handoverCopy{width:100%;min-height:48px;margin-top:12px;font-family:"Lexend",Arial,sans-serif;font-weight:900}.handoverAdd:disabled,.handoverCopy:disabled{opacity:.42;cursor:not-allowed}.handoverEntries{display:grid;gap:12px;margin-top:18px}.handoverEmpty{padding:42px 20px;border:1px dashed rgba(0,207,255,.25);border-radius:12px;color:#77949a;text-align:center;font-size:11px}.handoverEntry{padding:15px;border:1px solid rgba(0,207,255,.21);border-radius:13px;background:linear-gradient(145deg,rgba(7,24,31,.85),rgba(2,9,13,.92))}.handoverEntryTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.handoverEntryTop strong{color:#ffe600;font-size:12px;letter-spacing:.08em}.handoverEntryTop div{display:flex;gap:6px}.handoverEntryTop button{min-width:31px;height:29px;border:1px solid rgba(0,207,255,.25);border-radius:7px;color:#bfeef5;background:#0d2027;font:900 10px "Lexend",Arial,sans-serif}.handoverEntryTop button.danger{padding:0 10px;border-color:rgba(255,71,94,.35);color:#ff8b99;background:#2b1016}.handoverEntryTop button:disabled{opacity:.3}.handoverEntry>small{display:block;margin-top:7px;color:#718a90;font-size:8px}.handoverOutputPanel{position:sticky;top:22px}.handoverOutput{min-height:520px;max-height:68vh;overflow:auto;margin:24px 24px 0;border:1px solid rgba(0,207,255,.23);border-radius:13px;background:#02090d}.handoverOutput pre{min-height:520px;margin:0;padding:24px;white-space:pre-wrap;overflow-wrap:anywhere;color:#effcff;font:600 12px/1.75 "Lexend",Arial,sans-serif}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 48px);margin-left:24px;margin-right:24px}.handoverClear{padding:10px 14px!important;font-size:9px!important}
           .ssPreviewBackdrop{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.88);backdrop-filter:blur(7px)}
           .ssPreviewModal{display:flex;flex-direction:column;width:min(1180px,96vw);height:min(94vh,980px);overflow:hidden;border:1px solid rgba(238,196,92,.55);border-radius:16px;background:#071019;box-shadow:0 30px 100px #000}
           .ssPreviewHead{display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:12px 15px;border-bottom:1px solid #2f3943;background:#101a25}
@@ -2579,8 +2791,10 @@ export default function Home() {
           .shell.lightMode .referenceGuide,.shell.lightMode .syairGuide,.shell.lightMode .usdtIntro,.shell.lightMode .resultInfoIntro,.shell.lightMode .validationIntro,.shell.lightMode .quality,.shell.lightMode .usdtClock{border-color:rgba(0,145,180,.2)!important;background:linear-gradient(135deg,rgba(0,207,255,.08),rgba(255,225,0,.07))!important}
           .shell.lightMode .promptBox,.shell.lightMode .adjustedName,.shell.lightMode .resultMessageBox,.shell.lightMode .usdtOutput,.shell.lightMode .footballCode{border-color:rgba(0,145,180,.2)!important;background:#f7fcfd!important}.shell.lightMode .promptBox p,.shell.lightMode .resultMessageBox p,.shell.lightMode .usdtOutput pre,.shell.lightMode .footballCode textarea{color:#29474e!important;background:transparent!important}
           .shell.lightMode .secondary,.shell.lightMode .historyGrid button,.shell.lightMode .resultStats div{border-color:rgba(0,145,180,.22)!important;color:#315860!important;background:rgba(255,255,255,.68)!important}.shell.lightMode .userBar{border-color:rgba(0,145,180,.25)!important;background:rgba(244,252,253,.96)!important}.shell.lightMode .userBar span{color:#315860!important}
+          .shell.lightMode .handoverComposer,.shell.lightMode .handoverEntry,.shell.lightMode .handoverOutput{border-color:rgba(0,145,180,.24)!important;background:#f7fcfd!important}.shell.lightMode .handoverComposer textarea,.shell.lightMode .handoverEntry textarea{color:#17383f!important;background:#fff!important}.shell.lightMode .handoverOutput pre{color:#17383f!important}.shell.lightMode .handoverEmpty{color:#58777e}
           .shell.darkMode{color-scheme:dark}
-          @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}}
+          @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}}
+          @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}}
         `}</style>
       </main>
     </AuthGate>
