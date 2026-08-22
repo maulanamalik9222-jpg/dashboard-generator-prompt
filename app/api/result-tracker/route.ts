@@ -36,6 +36,10 @@ async function ensureSchema() {
       "CREATE INDEX IF NOT EXISTS idx_result_records_date ON result_records(result_date)",
     ),
   ]);
+  await db()
+    .prepare("ALTER TABLE result_records ADD COLUMN is_cleared INTEGER NOT NULL DEFAULT 0")
+    .run()
+    .catch(() => null);
 }
 
 async function canManage(user: any) {
@@ -66,6 +70,7 @@ export async function GET(req: Request) {
   const date = cleanDate(url.searchParams.get("date"));
   const month = Number(url.searchParams.get("month") || 0);
   const year = Number(url.searchParams.get("year") || 0);
+  const currentView = url.searchParams.get("view") === "current";
 
   const markets = await db()
     .prepare(
@@ -83,7 +88,7 @@ export async function GET(req: Request) {
     FROM result_records r JOIN result_markets m ON m.id=r.market_id`;
   let statement;
   if (date) {
-    statement = db().prepare(`${query} WHERE r.result_date=? ORDER BY m.shift,m.sort_order,m.name`).bind(date);
+    statement = db().prepare(`${query} WHERE r.result_date=?${currentView ? " AND r.is_cleared=0" : ""} ORDER BY m.shift,m.sort_order,m.name`).bind(date);
   } else if (year >= 2000 && month >= 1 && month <= 12) {
     const prefix = `${year}-${String(month).padStart(2, "0")}`;
     statement = db().prepare(`${query} WHERE substr(r.result_date,1,7)=? ORDER BY r.result_date DESC,m.shift,m.sort_order,m.name`).bind(prefix);
@@ -156,13 +161,25 @@ export async function POST(req: Request) {
     const now = Date.now();
     const existing = await db().prepare("SELECT id FROM result_records WHERE market_id=? AND result_date=?").bind(marketId,resultDate).first<{id:string}>();
     if (existing) {
-      await db().prepare(`UPDATE result_records SET prize_1=?,prize_2=?,prize_3=?,official_link=?,admin_result=?,updated_by=?,updated_by_name=?,updated_at=? WHERE id=?`)
+      await db().prepare(`UPDATE result_records SET prize_1=?,prize_2=?,prize_3=?,official_link=?,admin_result=?,updated_by=?,updated_by_name=?,updated_at=?,is_cleared=0 WHERE id=?`)
         .bind(prize1,prize2,prize3,officialLink,adminResult,user.id,user.name,now,existing.id).run();
     } else {
       await db().prepare(`INSERT INTO result_records(id,market_id,result_date,prize_1,prize_2,prize_3,official_link,admin_result,updated_by,updated_by_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
         .bind(crypto.randomUUID(),marketId,resultDate,prize1,prize2,prize3,officialLink,adminResult,user.id,user.name,now,now).run();
     }
     return json({ ok: true });
+  }
+
+  if (action === "reset-day-results") {
+    if (!(await canManage(user)))
+      return json({ error: "Hanya Master atau Asisten Master yang dapat mereset semua hasil." }, 403);
+    const resultDate = cleanDate(body.resultDate);
+    if (!resultDate) return json({ error: "Tanggal result tidak valid." }, 400);
+    const update = await db()
+      .prepare("UPDATE result_records SET is_cleared=1,updated_at=? WHERE result_date=?")
+      .bind(Date.now(), resultDate)
+      .run();
+    return json({ ok: true, archived: Number(update.meta?.changes || 0) });
   }
 
   return json({ error: "Aksi tidak dikenali." }, 400);

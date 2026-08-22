@@ -484,6 +484,7 @@ export default function Home() {
   const [todayResultRecords, setTodayResultRecords] = useState<ResultRecord[]>([]);
   const [resultArchive, setResultArchive] = useState<ResultRecord[]>([]);
   const [resultClock, setResultClock] = useState(new Date());
+  const [resultActiveDate, setResultActiveDate] = useState(getWibIsoDate());
   const [resultLoading, setResultLoading] = useState(false);
   const [resultError, setResultError] = useState("");
   const [resultManageOpen, setResultManageOpen] = useState(false);
@@ -1116,8 +1117,7 @@ export default function Home() {
     setResultLoading(true);
     setResultError("");
     try {
-      const today = getWibIsoDate();
-      const todayResponse = await fetch(`/api/result-tracker?date=${today}`, {
+      const todayResponse = await fetch(`/api/result-tracker?date=${resultActiveDate}&view=current`, {
         cache: "no-store",
       });
       const todayData = await todayResponse.json();
@@ -1148,12 +1148,44 @@ export default function Home() {
   useEffect(() => {
     if (kind !== "resultTracker") return;
     loadResultTracker();
-  }, [kind, resultFilterMode, resultFilterDate, resultFilterMonth, resultFilterYear]);
+  }, [kind, resultActiveDate, resultFilterMode, resultFilterDate, resultFilterMonth, resultFilterYear]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setResultClock(new Date()), 1_000);
+    let activeDate = getWibIsoDate();
+    const timer = window.setInterval(() => {
+      const now = new Date();
+      const nextDate = getWibIsoDate(now);
+      setResultClock(now);
+      if (nextDate !== activeDate) {
+        const previousDate = activeDate;
+        activeDate = nextDate;
+        setResultActiveDate(nextDate);
+        setResultFilterMode("day");
+        setResultFilterDate(previousDate);
+        setTodayResultRecords([]);
+        setResultEditor(null);
+        setResultInput({ prize1: "", prize2: "", prize3: "", officialLink: "", adminResult: "" });
+      }
+    }, 1_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const resetTodayResultRecords = async () => {
+    if (!window.confirm(`Reset semua HASIL RESULT tanggal ${resultActiveDate}? Nama pasaran dan seluruh jadwal tidak akan dihapus. Hasil tetap tersedia di Arsip Result.`)) return;
+    setResultError("");
+    const response = await fetch("/api/result-tracker", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "reset-day-results", resultDate: resultActiveDate }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setResultError(data.error || "Semua hasil gagal direset.");
+    setTodayResultRecords([]);
+    setResultEditor(null);
+    setResultFilterMode("day");
+    setResultFilterDate(resultActiveDate);
+    await loadResultTracker();
+  };
 
   const saveResultMarket = async () => {
     setResultError("");
@@ -1624,6 +1656,11 @@ export default function Home() {
                       ⚙ ATUR PASARAN
                     </button>
                   )}
+                  {canManageUsers && (
+                    <button className="resultResetAll" onClick={resetTodayResultRecords}>
+                      ↻ RESET SEMUA HASIL
+                    </button>
+                  )}
                 </section>
 
                 {resultError && <div className="resultTrackerError">{resultError}</div>}
@@ -1669,7 +1706,7 @@ export default function Home() {
                           <div className="resultCountdown"><span className="pulseDot"/><b>{status.countdown}</b></div>
                           {record && <div className="resultPrizes"><span><small>PRIZE 1</small><b>{record.prize1 || "-"}</b></span><span><small>PRIZE 2</small><b>{record.prize2 || "-"}</b></span><span><small>PRIZE 3</small><b>{record.prize3 || "-"}</b></span></div>}
                           <div className="resultCardLinks">{market.officialUrl && <a href={market.officialUrl} target="_blank" rel="noreferrer">↗ SITUS RESMI</a>}{record?.officialLink && <a href={record.officialLink} target="_blank" rel="noreferrer">↗ LINK RESULT</a>}</div>
-                          {record?.adminResult && <p className="resultAdminText"><small>HASIL RESULT ADMIN</small>{record.adminResult}</p>}
+                          {record?.adminResult && <div className="resultAdminText"><small>HASIL RESULT ADMIN</small>{/^https?:\/\//i.test(record.adminResult.trim()) ? <a href={record.adminResult.trim()} target="_blank" rel="noreferrer">↗ LIHAT HASIL RESULT ADMIN</a> : <p>{record.adminResult}</p>}</div>}
                           <button className={status.code === "due" ? "primary dueButton" : "secondary"} onClick={() => openResultEditor(market)}>{record ? "EDIT HASIL RESULT" : status.code === "due" ? "INPUT HASIL SEKARANG" : "INPUT HASIL"}</button>
                         </article>;
                       })}
@@ -1685,10 +1722,10 @@ export default function Home() {
                     {resultFilterMode === "day" ? <input type="date" value={resultFilterDate} onChange={(event) => setResultFilterDate(event.target.value)} /> : <><select value={resultFilterMonth} onChange={(event) => setResultFilterMonth(Number(event.target.value))}>{Array.from({ length: 12 }, (_, index) => <option value={index + 1} key={index}>{new Intl.DateTimeFormat("id-ID", { month: "long" }).format(new Date(2026, index, 1)).toUpperCase()}</option>)}</select><input type="number" min="2020" max="2100" value={resultFilterYear} onChange={(event) => setResultFilterYear(Number(event.target.value))} /></>}
                     <button className="secondary" onClick={loadResultTracker}>{resultLoading ? "MEMUAT..." : "REFRESH DATA"}</button>
                   </div>
-                  <div className="resultArchiveTable"><table><thead><tr><th>TANGGAL</th><th>SHIFT</th><th>PASARAN</th><th>PRIZE 1</th><th>PRIZE 2</th><th>PRIZE 3</th><th>LINK RESMI</th><th>HASIL ADMIN</th><th>UPDATE</th></tr></thead><tbody>{resultArchive.length ? resultArchive.map((record) => <tr key={record.id}><td>{record.resultDate}</td><td>{record.shift.toUpperCase()}</td><td>{record.marketName}</td><td>{record.prize1 || "-"}</td><td>{record.prize2 || "-"}</td><td>{record.prize3 || "-"}</td><td>{record.officialLink ? <a href={record.officialLink} target="_blank" rel="noreferrer">BUKA LINK</a> : "-"}</td><td>{record.adminResult || "-"}</td><td>{record.updatedByName || "-"}</td></tr>) : <tr><td colSpan={9}>Belum ada arsip pada filter ini.</td></tr>}</tbody></table></div>
+                  <div className="resultArchiveTable"><table><thead><tr><th>TANGGAL</th><th>SHIFT</th><th>PASARAN</th><th>PRIZE 1</th><th>PRIZE 2</th><th>PRIZE 3</th><th>LINK RESMI</th><th>HASIL ADMIN</th><th>UPDATE</th></tr></thead><tbody>{resultArchive.length ? resultArchive.map((record) => <tr key={record.id}><td>{record.resultDate}</td><td>{record.shift.toUpperCase()}</td><td>{record.marketName}</td><td>{record.prize1 || "-"}</td><td>{record.prize2 || "-"}</td><td>{record.prize3 || "-"}</td><td>{record.officialLink ? <a href={record.officialLink} target="_blank" rel="noreferrer">BUKA LINK RESMI</a> : "-"}</td><td>{record.adminResult ? (/^https?:\/\//i.test(record.adminResult.trim()) ? <a href={record.adminResult.trim()} target="_blank" rel="noreferrer">LIHAT HASIL ADMIN</a> : record.adminResult) : "-"}</td><td>{record.updatedByName || "-"}</td></tr>) : <tr><td colSpan={9}>Belum ada arsip pada filter ini.</td></tr>}</tbody></table></div>
                 </section>
 
-                {resultEditor && <div className="resultModalBackdrop"><section className="resultModal"><button className="resultModalClose" onClick={() => setResultEditor(null)}>×</button><small>INPUT RESULT HARI INI</small><h2>{resultEditor.name}</h2><p>{getWibIsoDate()} · Result {resultEditor.resultTime} WIB</p><div className="resultPrizeInputs"><label><span>Prize 1</span><input value={resultInput.prize1} onChange={(event) => setResultInput((old) => ({ ...old, prize1: event.target.value }))} /></label><label><span>Prize 2</span><input value={resultInput.prize2} onChange={(event) => setResultInput((old) => ({ ...old, prize2: event.target.value }))} /></label><label><span>Prize 3</span><input value={resultInput.prize3} onChange={(event) => setResultInput((old) => ({ ...old, prize3: event.target.value }))} /></label></div><label><span>Link Resmi Result</span><input value={resultInput.officialLink} onChange={(event) => setResultInput((old) => ({ ...old, officialLink: event.target.value }))} placeholder="https://..." /></label><label><span>Hasil Result Admin</span><textarea rows={4} value={resultInput.adminResult} onChange={(event) => setResultInput((old) => ({ ...old, adminResult: event.target.value }))} placeholder="Tempel hasil result dari admin di sini..." /></label><button className="primary" onClick={saveResultRecord}>SIMPAN HASIL RESULT</button></section></div>}
+                {resultEditor && <div className="resultModalBackdrop"><section className="resultModal"><button className="resultModalClose" onClick={() => setResultEditor(null)}>×</button><small>INPUT RESULT HARI INI</small><h2>{resultEditor.name}</h2><p>{getWibIsoDate()} · Result {resultEditor.resultTime} WIB</p><div className="resultPrizeInputs"><label><span>Prize 1</span><input value={resultInput.prize1} onChange={(event) => setResultInput((old) => ({ ...old, prize1: event.target.value }))} /></label><label><span>Prize 2</span><input value={resultInput.prize2} onChange={(event) => setResultInput((old) => ({ ...old, prize2: event.target.value }))} /></label><label><span>Prize 3</span><input value={resultInput.prize3} onChange={(event) => setResultInput((old) => ({ ...old, prize3: event.target.value }))} /></label></div><label><span>Link Resmi Result</span><input value={resultInput.officialLink} onChange={(event) => setResultInput((old) => ({ ...old, officialLink: event.target.value }))} placeholder="https://link-result-resmi..." /></label><label><span>Link / Hasil Result Admin</span><textarea rows={4} value={resultInput.adminResult} onChange={(event) => setResultInput((old) => ({ ...old, adminResult: event.target.value }))} placeholder="Tempel link screenshot hasil admin (https://...) atau keterangan admin..." /></label><button className="primary" onClick={saveResultRecord}>SIMPAN HASIL RESULT</button></section></div>}
               </section>
             ) : kind === "handover" ? (
               <section className="handoverStudio">
@@ -3111,7 +3148,9 @@ export default function Home() {
           .shell.lightMode .promptBox,.shell.lightMode .adjustedName,.shell.lightMode .resultMessageBox,.shell.lightMode .usdtOutput,.shell.lightMode .footballCode{border-color:rgba(0,145,180,.2)!important;background:#f7fcfd!important}.shell.lightMode .promptBox p,.shell.lightMode .resultMessageBox p,.shell.lightMode .usdtOutput pre,.shell.lightMode .footballCode textarea{color:#29474e!important;background:transparent!important}
           .shell.lightMode .secondary,.shell.lightMode .historyGrid button,.shell.lightMode .resultStats div{border-color:rgba(0,145,180,.22)!important;color:#315860!important;background:rgba(255,255,255,.68)!important}.shell.lightMode .userBar{border-color:rgba(0,145,180,.25)!important;background:rgba(244,252,253,.96)!important}.shell.lightMode .userBar span{color:#315860!important}
           .shell.lightMode .handoverComposer,.shell.lightMode .handoverEntry,.shell.lightMode .handoverOutput{border-color:rgba(0,145,180,.24)!important;background:#f7fcfd!important}.shell.lightMode .handoverComposer textarea,.shell.lightMode .handoverEntry textarea{color:#17383f!important;background:#fff!important}.shell.lightMode .handoverOutput pre{color:#17383f!important}.shell.lightMode .handoverEmpty{color:#58777e}
-          .shell.lightMode .resultMarketCard,.shell.lightMode .resultLiveClock,.shell.lightMode .resultMarketForm input,.shell.lightMode .resultMarketForm select,.shell.lightMode .resultFilters input,.shell.lightMode .resultFilters select{color:#17383f!important;background:#f7fcfd!important}.shell.lightMode .resultMarketCardTop h3,.shell.lightMode .resultMarketList b{color:#17383f!important}.shell.lightMode .resultSchedule>div,.shell.lightMode .resultPrizes>span,.shell.lightMode .resultAdminText{background:#fff!important}.shell.lightMode .resultModal{background:#edf9fb!important}.shell.lightMode .resultModal input,.shell.lightMode .resultModal textarea{color:#17383f!important;background:#fff!important}
+          .resultResetAll{min-height:42px;padding:0 15px;border:1px solid #a63b4b;border-radius:9px;color:#ffd1d7;background:linear-gradient(135deg,#43141c,#240b10);font:900 9px "Lexend",Arial,sans-serif}.resultResetAll:hover{border-color:#ff6075;box-shadow:0 0 20px rgba(255,70,95,.18)}
+          .resultMarketCard{gap:15px;padding:20px}.resultMarketCardTop small{font-size:9px}.resultMarketCardTop h3{font-size:20px;line-height:1.25}.resultMarketCardTop>span{padding:7px 9px;font-size:9px;line-height:1.35}.resultSchedule>div,.resultPrizes>span{padding:12px}.resultSchedule small,.resultPrizes small,.resultAdminText small{font-size:8px;letter-spacing:.04em}.resultSchedule b{font-size:14px}.resultCountdown{font-size:10px}.resultPrizes b{font-size:20px}.resultCardLinks{gap:8px}.resultCardLinks a{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 11px;font-size:9px}.resultAdminText{gap:8px;padding:12px;font-size:10px;line-height:1.55}.resultAdminText a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 11px;border:1px solid #28b9d5;border-radius:7px;color:#70e9ff;background:#061a21;font-size:10px;font-weight:900;text-decoration:none}.resultAdminText a:hover{border-color:#ffe600;color:#ffe600}.resultAdminText p{margin:0;color:#e5f5f7;font-size:10px;line-height:1.6}.resultMarketCard>button{min-height:44px;font-size:10px;font-weight:900}.resultArchiveTable th,.resultArchiveTable td{font-size:10px}.resultArchiveTable th{font-size:9px}.resultArchiveTable a{display:inline-flex;padding:6px 8px;border:1px solid rgba(0,207,255,.25);border-radius:6px;text-decoration:none}
+          .shell.lightMode .resultMarketCard,.shell.lightMode .resultLiveClock,.shell.lightMode .resultMarketForm input,.shell.lightMode .resultMarketForm select,.shell.lightMode .resultFilters input,.shell.lightMode .resultFilters select{color:#17383f!important;background:#f7fcfd!important}.shell.lightMode .resultMarketCardTop h3,.shell.lightMode .resultMarketList b{color:#17383f!important}.shell.lightMode .resultSchedule>div,.shell.lightMode .resultPrizes>span,.shell.lightMode .resultAdminText{background:#fff!important}.shell.lightMode .resultAdminText p{color:#17383f!important}.shell.lightMode .resultAdminText a{color:#087c96;background:#e7faff}.shell.lightMode .resultModal{background:#edf9fb!important}.shell.lightMode .resultModal input,.shell.lightMode .resultModal textarea{color:#17383f!important;background:#fff!important}
           .shell.darkMode{color-scheme:dark}
           @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
           @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
