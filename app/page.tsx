@@ -13,9 +13,35 @@ type Kind =
   | "result"
   | "bola"
   | "monitor"
-  | "handover";
+  | "handover"
+  | "resultTracker";
 type HandoverShift = "pagi" | "malam";
 type HandoverEntry = { id: string; content: string };
+type ResultMarket = {
+  id: string;
+  name: string;
+  shift: "pagi" | "malam";
+  closeTime: string;
+  resultTime: string;
+  officialUrl: string;
+  active: boolean;
+};
+type ResultRecord = {
+  id: string;
+  marketId: string;
+  marketName: string;
+  shift: "pagi" | "malam";
+  resultDate: string;
+  closeTime: string;
+  resultTime: string;
+  prize1: string;
+  prize2: string;
+  prize3: string;
+  officialLink: string;
+  adminResult: string;
+  updatedAt: number;
+  updatedByName?: string;
+};
 type FootballMatch = {
   time: string;
   date: string;
@@ -150,6 +176,12 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
     icon: "⇄",
     hint: "Catatan serah terima dua shift",
   },
+  {
+    id: "resultTracker",
+    label: "Result Pasaran",
+    icon: "◉",
+    hint: "Jadwal dan arsip result harian",
+  },
 ];
 
 function getAutomaticDate() {
@@ -177,6 +209,33 @@ function getAutomaticDateTime() {
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
   return `${value("day")} ${value("month").toUpperCase()} ${value("year")} (${value("hour")}:${value("minute")}:${value("second")} WIB)`;
+}
+
+function getWibIsoDate(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function getWibClockParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value || 0);
+  return { hour: value("hour"), minute: value("minute"), second: value("second") };
+}
+
+function minutesFromClock(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : 0;
 }
 
 const initial: FormState = {
@@ -421,6 +480,34 @@ export default function Home() {
   >({ pagi: [], malam: [] });
   const [handoverLoaded, setHandoverLoaded] = useState(false);
   const [handoverCopied, setHandoverCopied] = useState(false);
+  const [resultMarkets, setResultMarkets] = useState<ResultMarket[]>([]);
+  const [todayResultRecords, setTodayResultRecords] = useState<ResultRecord[]>([]);
+  const [resultArchive, setResultArchive] = useState<ResultRecord[]>([]);
+  const [resultClock, setResultClock] = useState(new Date());
+  const [resultLoading, setResultLoading] = useState(false);
+  const [resultError, setResultError] = useState("");
+  const [resultManageOpen, setResultManageOpen] = useState(false);
+  const [resultEditMarket, setResultEditMarket] = useState<ResultMarket | null>(null);
+  const [resultMarketDraft, setResultMarketDraft] = useState({
+    name: "",
+    shift: "pagi" as "pagi" | "malam",
+    closeTime: "09:25",
+    resultTime: "09:30",
+    officialUrl: "",
+    active: true,
+  });
+  const [resultEditor, setResultEditor] = useState<ResultMarket | null>(null);
+  const [resultInput, setResultInput] = useState({
+    prize1: "",
+    prize2: "",
+    prize3: "",
+    officialLink: "",
+    adminResult: "",
+  });
+  const [resultFilterMode, setResultFilterMode] = useState<"day" | "month">("day");
+  const [resultFilterDate, setResultFilterDate] = useState(getWibIsoDate());
+  const [resultFilterMonth, setResultFilterMonth] = useState(new Date().getMonth() + 1);
+  const [resultFilterYear, setResultFilterYear] = useState(new Date().getFullYear());
   const monitorCaptureResolvers = useRef(
     new Map<
       string,
@@ -1025,6 +1112,148 @@ export default function Home() {
     window.setTimeout(() => setHandoverCopied(false), 1800);
   };
 
+  const loadResultTracker = async () => {
+    setResultLoading(true);
+    setResultError("");
+    try {
+      const today = getWibIsoDate();
+      const todayResponse = await fetch(`/api/result-tracker?date=${today}`, {
+        cache: "no-store",
+      });
+      const todayData = await todayResponse.json();
+      if (!todayResponse.ok)
+        throw new Error(todayData.error || "Data result gagal dimuat.");
+      setResultMarkets(Array.isArray(todayData.markets) ? todayData.markets : []);
+      setTodayResultRecords(
+        Array.isArray(todayData.records) ? todayData.records : [],
+      );
+      const archiveQuery =
+        resultFilterMode === "day"
+          ? `date=${resultFilterDate}`
+          : `month=${resultFilterMonth}&year=${resultFilterYear}`;
+      const archiveResponse = await fetch(`/api/result-tracker?${archiveQuery}`, {
+        cache: "no-store",
+      });
+      const archiveData = await archiveResponse.json();
+      if (!archiveResponse.ok)
+        throw new Error(archiveData.error || "Arsip result gagal dimuat.");
+      setResultArchive(Array.isArray(archiveData.records) ? archiveData.records : []);
+    } catch (error) {
+      setResultError(error instanceof Error ? error.message : "Data result gagal dimuat.");
+    } finally {
+      setResultLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (kind !== "resultTracker") return;
+    loadResultTracker();
+  }, [kind, resultFilterMode, resultFilterDate, resultFilterMonth, resultFilterYear]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setResultClock(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const saveResultMarket = async () => {
+    setResultError("");
+    const response = await fetch("/api/result-tracker", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "save-market",
+        id: resultEditMarket?.id,
+        ...resultMarketDraft,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setResultError(data.error || "Pasaran gagal disimpan.");
+    setResultEditMarket(null);
+    setResultMarketDraft({
+      name: "",
+      shift: "pagi",
+      closeTime: "09:25",
+      resultTime: "09:30",
+      officialUrl: "",
+      active: true,
+    });
+    await loadResultTracker();
+  };
+
+  const editResultMarket = (market: ResultMarket) => {
+    setResultEditMarket(market);
+    setResultMarketDraft({
+      name: market.name,
+      shift: market.shift,
+      closeTime: market.closeTime,
+      resultTime: market.resultTime,
+      officialUrl: market.officialUrl,
+      active: market.active,
+    });
+    setResultManageOpen(true);
+  };
+
+  const deleteResultMarket = async (market: ResultMarket) => {
+    if (!window.confirm(`Hapus pasaran ${market.name} beserta seluruh arsipnya?`)) return;
+    const response = await fetch("/api/result-tracker", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete-market", id: market.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setResultError(data.error || "Pasaran gagal dihapus.");
+    await loadResultTracker();
+  };
+
+  const openResultEditor = (market: ResultMarket) => {
+    const existing = todayResultRecords.find((record) => record.marketId === market.id);
+    setResultEditor(market);
+    setResultInput({
+      prize1: existing?.prize1 || "",
+      prize2: existing?.prize2 || "",
+      prize3: existing?.prize3 || "",
+      officialLink: existing?.officialLink || "",
+      adminResult: existing?.adminResult || "",
+    });
+  };
+
+  const saveResultRecord = async () => {
+    if (!resultEditor) return;
+    setResultError("");
+    const response = await fetch("/api/result-tracker", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "save-result",
+        marketId: resultEditor.id,
+        resultDate: getWibIsoDate(),
+        ...resultInput,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setResultError(data.error || "Result gagal disimpan.");
+    setResultEditor(null);
+    await loadResultTracker();
+  };
+
+  const resultStatus = (market: ResultMarket) => {
+    const record = todayResultRecords.find((item) => item.marketId === market.id);
+    const clock = getWibClockParts(resultClock);
+    const nowSeconds = clock.hour * 3600 + clock.minute * 60 + clock.second;
+    const closeSeconds = minutesFromClock(market.closeTime) * 60;
+    const resultSeconds = minutesFromClock(market.resultTime) * 60;
+    if (record && (record.prize1 || record.prize2 || record.prize3 || record.adminResult))
+      return { code: "done", text: "SUDAH RESULT", countdown: "Result tersimpan" };
+    const target = nowSeconds < closeSeconds ? closeSeconds : resultSeconds;
+    const remaining = Math.max(0, target - nowSeconds);
+    const countdown = `${String(Math.floor(remaining / 3600)).padStart(2, "0")}:${String(Math.floor((remaining % 3600) / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
+    if (nowSeconds < closeSeconds)
+      return { code: "open", text: "BET BERJALAN", countdown: `Tutup dalam ${countdown}` };
+    if (nowSeconds < resultSeconds)
+      return { code: "waiting", text: "MENUNGGU RESULT", countdown: `Result dalam ${countdown}` };
+    return { code: "due", text: `SILAKAN RESULT PASARAN ${market.name}`, countdown: "Waktu result telah tiba" };
+  };
+
   const updateUsdtBlock = (value: string) => {
     setUsdtRaw(value);
     const clean = value.replace(/\u00a0/g, " ");
@@ -1272,6 +1501,8 @@ export default function Home() {
               <p className="sub">
                 {kind === "monitor"
                   ? "Kelola kategori, login terenkripsi, dan screenshot otomatis untuk dua shift."
+                  : kind === "resultTracker"
+                    ? "Pantau jadwal result pagi dan malam, isi hasil, dan buka kembali arsip berdasarkan tanggal."
                   : kind === "handover"
                     ? "Susun catatan serah terima shift, revisi setiap nomor, lalu salin seluruh hasil."
                   : "Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda."}
@@ -1362,6 +1593,8 @@ export default function Home() {
             className={
               kind === "monitor"
                 ? "grid monitorGrid lexendContent"
+                : kind === "resultTracker"
+                  ? "grid resultTrackerGrid lexendContent"
                 : kind === "handover"
                   ? "grid handoverGrid lexendContent"
                 : kind === "bola"
@@ -1373,7 +1606,91 @@ export default function Home() {
                       : "grid lexendContent"
             }
           >
-            {kind === "handover" ? (
+            {kind === "resultTracker" ? (
+              <section className="resultTrackerStudio">
+                <section className="panel resultTrackerHero">
+                  <div>
+                    <span className="resultTrackerKicker">LIVE RESULT CONTROL</span>
+                    <h1>Result Pasaran</h1>
+                    <p>Jadwal, pengingat otomatis, input hasil, dan arsip result tersimpan.</p>
+                  </div>
+                  <div className="resultLiveClock">
+                    <small>WAKTU INDONESIA BARAT</small>
+                    <b>{new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(resultClock)} WIB</b>
+                    <span>{getAutomaticDate()}</span>
+                  </div>
+                  {canManageUsers && (
+                    <button className="ghost" onClick={() => setResultManageOpen((open) => !open)}>
+                      ⚙ ATUR PASARAN
+                    </button>
+                  )}
+                </section>
+
+                {resultError && <div className="resultTrackerError">{resultError}</div>}
+
+                {canManageUsers && resultManageOpen && (
+                  <section className="panel resultMarketManager">
+                    <div className="panelHead">
+                      <div><span>01</span><h2>Pengaturan Pasaran</h2></div>
+                      <button className="ghost" onClick={() => setResultManageOpen(false)}>Tutup</button>
+                    </div>
+                    <div className="resultMarketForm">
+                      <label><span>Nama Pasaran</span><input value={resultMarketDraft.name} onChange={(event) => setResultMarketDraft((old) => ({ ...old, name: event.target.value }))} placeholder="Contoh: FLORIDAEVE" /></label>
+                      <label><span>Shift</span><select value={resultMarketDraft.shift} onChange={(event) => setResultMarketDraft((old) => ({ ...old, shift: event.target.value as "pagi" | "malam" }))}><option value="pagi">SHIFT PAGI</option><option value="malam">SHIFT MALAM</option></select></label>
+                      <label><span>Jam Bet Close</span><input type="time" value={resultMarketDraft.closeTime} onChange={(event) => setResultMarketDraft((old) => ({ ...old, closeTime: event.target.value }))} /></label>
+                      <label><span>Jam Result</span><input type="time" value={resultMarketDraft.resultTime} onChange={(event) => setResultMarketDraft((old) => ({ ...old, resultTime: event.target.value }))} /></label>
+                      <label className="resultOfficialUrl"><span>Link Resmi Pasaran</span><input value={resultMarketDraft.officialUrl} onChange={(event) => setResultMarketDraft((old) => ({ ...old, officialUrl: event.target.value }))} placeholder="https://..." /></label>
+                      <label className="resultActiveCheck"><input type="checkbox" checked={resultMarketDraft.active} onChange={(event) => setResultMarketDraft((old) => ({ ...old, active: event.target.checked }))} /><span>Pasaran aktif</span></label>
+                      <button className="primary" onClick={saveResultMarket}>{resultEditMarket ? "SIMPAN PERUBAHAN" : "+ TAMBAH PASARAN"}</button>
+                      {resultEditMarket && <button className="secondary" onClick={() => { setResultEditMarket(null); setResultMarketDraft({ name: "", shift: "pagi", closeTime: "09:25", resultTime: "09:30", officialUrl: "", active: true }); }}>BATAL EDIT</button>}
+                    </div>
+                    <div className="resultMarketList">
+                      {resultMarkets.map((market) => <div key={market.id}><b>{market.name}</b><span>{market.shift.toUpperCase()}</span><small>Tutup {market.closeTime} · Result {market.resultTime}</small><em className={market.active ? "active" : "off"}>{market.active ? "AKTIF" : "OFF"}</em><button onClick={() => editResultMarket(market)}>Edit</button><button className="danger" onClick={() => deleteResultMarket(market)}>Hapus</button></div>)}
+                    </div>
+                  </section>
+                )}
+
+                <div className="resultDueNotice">
+                  {resultMarkets.filter((market) => market.active && resultStatus(market).code === "due").length ? (
+                    resultMarkets.filter((market) => market.active && resultStatus(market).code === "due").map((market) => <button key={market.id} onClick={() => openResultEditor(market)}>⚠ SILAKAN RESULT PASARAN <b>{market.name}</b></button>)
+                  ) : <span>✓ Belum ada pasaran yang melewati jadwal result tanpa hasil.</span>}
+                </div>
+
+                {(["pagi", "malam"] as const).map((shift) => (
+                  <section className="resultShiftSection" key={shift}>
+                    <div className="resultShiftHead"><div><span>{shift === "pagi" ? "☀" : "☾"}</span><h2>PASARAN {shift.toUpperCase()}</h2></div><b>{resultMarkets.filter((market) => market.active && market.shift === shift).length} PASARAN</b></div>
+                    <div className="resultMarketCards">
+                      {resultMarkets.filter((market) => market.active && market.shift === shift).length === 0 ? <div className="resultEmpty">Belum ada pasaran Shift {shift.toUpperCase()}.</div> : resultMarkets.filter((market) => market.active && market.shift === shift).map((market) => {
+                        const status = resultStatus(market);
+                        const record = todayResultRecords.find((item) => item.marketId === market.id);
+                        return <article className={`resultMarketCard status-${status.code}`} key={market.id}>
+                          <div className="resultMarketCardTop"><div><small>{market.shift.toUpperCase()}</small><h3>{market.name}</h3></div><span>{status.text}</span></div>
+                          <div className="resultSchedule"><div><small>BET CLOSE</small><b>{market.closeTime} WIB</b></div><div><small>JADWAL RESULT</small><b>{market.resultTime} WIB</b></div></div>
+                          <div className="resultCountdown"><span className="pulseDot"/><b>{status.countdown}</b></div>
+                          {record && <div className="resultPrizes"><span><small>PRIZE 1</small><b>{record.prize1 || "-"}</b></span><span><small>PRIZE 2</small><b>{record.prize2 || "-"}</b></span><span><small>PRIZE 3</small><b>{record.prize3 || "-"}</b></span></div>}
+                          <div className="resultCardLinks">{market.officialUrl && <a href={market.officialUrl} target="_blank" rel="noreferrer">↗ SITUS RESMI</a>}{record?.officialLink && <a href={record.officialLink} target="_blank" rel="noreferrer">↗ LINK RESULT</a>}</div>
+                          {record?.adminResult && <p className="resultAdminText"><small>HASIL RESULT ADMIN</small>{record.adminResult}</p>}
+                          <button className={status.code === "due" ? "primary dueButton" : "secondary"} onClick={() => openResultEditor(market)}>{record ? "EDIT HASIL RESULT" : status.code === "due" ? "INPUT HASIL SEKARANG" : "INPUT HASIL"}</button>
+                        </article>;
+                      })}
+                    </div>
+                  </section>
+                ))}
+
+                <section className="panel resultArchivePanel">
+                  <div className="panelHead"><div><span>02</span><h2>Arsip Result</h2></div><span className="live">● TERSIMPAN</span></div>
+                  <div className="resultFilters">
+                    <button className={resultFilterMode === "day" ? "active" : ""} onClick={() => setResultFilterMode("day")}>FILTER TANGGAL</button>
+                    <button className={resultFilterMode === "month" ? "active" : ""} onClick={() => setResultFilterMode("month")}>FILTER BULAN & TAHUN</button>
+                    {resultFilterMode === "day" ? <input type="date" value={resultFilterDate} onChange={(event) => setResultFilterDate(event.target.value)} /> : <><select value={resultFilterMonth} onChange={(event) => setResultFilterMonth(Number(event.target.value))}>{Array.from({ length: 12 }, (_, index) => <option value={index + 1} key={index}>{new Intl.DateTimeFormat("id-ID", { month: "long" }).format(new Date(2026, index, 1)).toUpperCase()}</option>)}</select><input type="number" min="2020" max="2100" value={resultFilterYear} onChange={(event) => setResultFilterYear(Number(event.target.value))} /></>}
+                    <button className="secondary" onClick={loadResultTracker}>{resultLoading ? "MEMUAT..." : "REFRESH DATA"}</button>
+                  </div>
+                  <div className="resultArchiveTable"><table><thead><tr><th>TANGGAL</th><th>SHIFT</th><th>PASARAN</th><th>PRIZE 1</th><th>PRIZE 2</th><th>PRIZE 3</th><th>LINK RESMI</th><th>HASIL ADMIN</th><th>UPDATE</th></tr></thead><tbody>{resultArchive.length ? resultArchive.map((record) => <tr key={record.id}><td>{record.resultDate}</td><td>{record.shift.toUpperCase()}</td><td>{record.marketName}</td><td>{record.prize1 || "-"}</td><td>{record.prize2 || "-"}</td><td>{record.prize3 || "-"}</td><td>{record.officialLink ? <a href={record.officialLink} target="_blank" rel="noreferrer">BUKA LINK</a> : "-"}</td><td>{record.adminResult || "-"}</td><td>{record.updatedByName || "-"}</td></tr>) : <tr><td colSpan={9}>Belum ada arsip pada filter ini.</td></tr>}</tbody></table></div>
+                </section>
+
+                {resultEditor && <div className="resultModalBackdrop"><section className="resultModal"><button className="resultModalClose" onClick={() => setResultEditor(null)}>×</button><small>INPUT RESULT HARI INI</small><h2>{resultEditor.name}</h2><p>{getWibIsoDate()} · Result {resultEditor.resultTime} WIB</p><div className="resultPrizeInputs"><label><span>Prize 1</span><input value={resultInput.prize1} onChange={(event) => setResultInput((old) => ({ ...old, prize1: event.target.value }))} /></label><label><span>Prize 2</span><input value={resultInput.prize2} onChange={(event) => setResultInput((old) => ({ ...old, prize2: event.target.value }))} /></label><label><span>Prize 3</span><input value={resultInput.prize3} onChange={(event) => setResultInput((old) => ({ ...old, prize3: event.target.value }))} /></label></div><label><span>Link Resmi Result</span><input value={resultInput.officialLink} onChange={(event) => setResultInput((old) => ({ ...old, officialLink: event.target.value }))} placeholder="https://..." /></label><label><span>Hasil Result Admin</span><textarea rows={4} value={resultInput.adminResult} onChange={(event) => setResultInput((old) => ({ ...old, adminResult: event.target.value }))} placeholder="Tempel hasil result dari admin di sini..." /></label><button className="primary" onClick={saveResultRecord}>SIMPAN HASIL RESULT</button></section></div>}
+              </section>
+            ) : kind === "handover" ? (
               <section className="handoverStudio">
                 <section className="panel handoverEditor">
                   <div className="panelHead">
@@ -2721,6 +3038,7 @@ export default function Home() {
             kind !== "result" &&
             kind !== "monitor" &&
             kind !== "handover" &&
+            kind !== "resultTracker" &&
             history.length > 0 && (
               <section className="history">
                 <div className="historyTitle">
@@ -2772,6 +3090,7 @@ export default function Home() {
           .ssThumbnailButton img{display:block;width:100%;height:138px;object-fit:cover;object-position:top center;background:#05090c}
           .ssThumbnailButton span{position:absolute;right:7px;bottom:7px;padding:5px 8px;border-radius:5px;color:#ffe394;background:rgba(5,8,10,.88);font-size:7px;font-weight:900;letter-spacing:.04em;box-shadow:0 3px 12px #000}
           .autoSsCardFoot{gap:6px}.autoSsCardFoot small{margin-right:auto}.autoSsCardFoot .viewSsButton{color:#dfffee;border-color:#42b98a;background:#103d30}
+          .resultTrackerGrid{display:block!important;max-width:1480px}.resultTrackerStudio{display:grid;gap:18px}.resultTrackerHero{display:flex;align-items:center;gap:28px;padding:24px 28px}.resultTrackerHero>div:first-child{margin-right:auto}.resultTrackerKicker{color:#57f2c0;font-size:8px;font-weight:900;letter-spacing:.2em}.resultTrackerHero h1{margin:6px 0 3px;font-size:32px}.resultTrackerHero p{margin:0;color:#95abb2;font-size:11px}.resultLiveClock{display:grid;min-width:235px;padding:13px 18px;border:1px solid rgba(0,217,255,.25);border-radius:12px;background:#031016}.resultLiveClock small{color:#6f939c;font-size:7px}.resultLiveClock b{margin:4px 0;color:#ffe600;font-size:20px}.resultLiveClock span{color:#b5ced4;font-size:8px}.resultTrackerError{padding:14px 18px;border:1px solid #9e3041;border-radius:10px;color:#ff96a4;background:#35121a;font-size:10px;font-weight:800}.resultMarketManager{overflow:hidden}.resultMarketForm{display:grid;grid-template-columns:1.2fr .8fr .75fr .75fr 2fr auto auto auto;gap:10px;align-items:end;padding:20px}.resultMarketForm label{display:grid;gap:7px}.resultMarketForm label span{color:#91abb2;font-size:8px;font-weight:800}.resultMarketForm input,.resultMarketForm select,.resultFilters input,.resultFilters select,.resultModal input,.resultModal textarea{min-height:42px;border:1px solid rgba(0,207,255,.25);border-radius:8px;padding:0 11px;color:#ecffff;background:#020b0f;font:700 10px "Lexend",Arial,sans-serif}.resultMarketForm button{min-height:42px}.resultActiveCheck{display:flex!important;align-items:center;gap:7px;min-width:92px}.resultActiveCheck input{min-height:auto;width:18px;height:18px}.resultMarketList{display:grid;border-top:1px solid rgba(0,207,255,.17)}.resultMarketList>div{display:grid;grid-template-columns:1.2fr .6fr 1.4fr .5fr auto auto;gap:10px;align-items:center;padding:10px 20px;border-bottom:1px solid rgba(0,207,255,.11)}.resultMarketList b{color:#fff;font-size:10px}.resultMarketList span,.resultMarketList small{color:#93aab0;font-size:8px}.resultMarketList em{font-style:normal;font-size:7px;font-weight:900}.resultMarketList em.active{color:#49f3b7}.resultMarketList em.off{color:#ff8190}.resultMarketList button{padding:7px 10px;border:1px solid #36515a;border-radius:6px;color:#dffaff;background:#102229;font-size:7px;font-weight:900}.resultMarketList button.danger{border-color:#7a2e3b;color:#ff9dab;background:#2f1118}.resultDueNotice{display:flex;flex-wrap:wrap;gap:9px}.resultDueNotice button,.resultDueNotice>span{padding:13px 17px;border:1px solid #a83c4b;border-radius:10px;color:#ffd4da;background:linear-gradient(135deg,#44131c,#230b10);font:800 10px "Lexend",Arial,sans-serif}.resultDueNotice>span{border-color:rgba(0,207,255,.2);color:#75dcb9;background:#07181a}.resultShiftSection{display:grid;gap:12px}.resultShiftHead{display:flex;align-items:center;justify-content:space-between;padding:0 4px}.resultShiftHead>div{display:flex;align-items:center;gap:10px}.resultShiftHead span{font-size:21px}.resultShiftHead h2{margin:0;font-size:20px}.resultShiftHead>b{padding:7px 10px;border:1px solid rgba(0,207,255,.2);border-radius:7px;color:#89aab1;font-size:8px}.resultMarketCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.resultMarketCard{display:grid;gap:12px;padding:16px;border:1px solid rgba(0,207,255,.22);border-radius:14px;background:linear-gradient(145deg,#071b22,#020a0e);box-shadow:0 15px 35px rgba(0,0,0,.24)}.resultMarketCard.status-due{border-color:#ef5368;box-shadow:0 0 24px rgba(239,83,104,.11)}.resultMarketCard.status-done{border-color:#26c98f}.resultMarketCardTop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.resultMarketCardTop small{color:#d5b23e;font-size:7px;font-weight:900}.resultMarketCardTop h3{margin:4px 0 0;color:#fff;font-size:15px}.resultMarketCardTop>span{max-width:52%;padding:5px 7px;border-radius:6px;color:#ff9aa7;background:#35141a;text-align:center;font-size:6px;font-weight:900}.status-done .resultMarketCardTop>span{color:#58e6b3;background:#0d362b}.status-open .resultMarketCardTop>span{color:#a8ebff;background:#0d2932}.resultSchedule,.resultPrizes{display:grid;grid-template-columns:1fr 1fr;gap:7px}.resultSchedule>div,.resultPrizes>span{display:grid;padding:9px;border:1px solid rgba(0,207,255,.13);border-radius:8px;background:#031015}.resultSchedule small,.resultPrizes small,.resultAdminText small{color:#6f929a;font-size:6px;font-weight:900}.resultSchedule b{margin-top:3px;color:#ffe600;font-size:10px}.resultCountdown{display:flex;align-items:center;gap:7px;color:#b8d0d5;font-size:8px}.pulseDot{width:7px;height:7px;border-radius:50%;background:#31e6a8;box-shadow:0 0 11px #31e6a8;animation:pulse 1.2s infinite}.status-due .pulseDot{background:#ff546c;box-shadow:0 0 11px #ff546c}.resultPrizes{grid-template-columns:repeat(3,1fr)}.resultPrizes b{margin-top:3px;color:#fff;font-size:13px}.resultCardLinks{display:flex;flex-wrap:wrap;gap:6px}.resultCardLinks a{padding:6px 8px;border:1px solid #285761;border-radius:6px;color:#74e7ff;font-size:7px;font-weight:900;text-decoration:none}.resultAdminText{display:grid;gap:5px;margin:0;padding:9px;border-radius:7px;color:#e5f5f7;background:#02090d;font-size:8px;white-space:pre-wrap}.dueButton{box-shadow:0 0 20px rgba(255,68,92,.18)!important}.resultEmpty{grid-column:1/-1;padding:38px;border:1px dashed rgba(0,207,255,.2);border-radius:12px;color:#759098;text-align:center}.resultArchivePanel{overflow:hidden}.resultFilters{display:flex;flex-wrap:wrap;gap:8px;padding:18px}.resultFilters button{min-height:40px;padding:0 13px;border:1px solid #3a5058;border-radius:8px;color:#a4b7bc;background:#0b1920;font-size:8px;font-weight:900}.resultFilters button.active{border-color:#ffe600;color:#111000;background:#ffe600}.resultFilters input,.resultFilters select{min-width:150px}.resultArchiveTable{overflow:auto;border-top:1px solid rgba(0,207,255,.15)}.resultArchiveTable table{width:100%;min-width:980px;border-collapse:collapse}.resultArchiveTable th,.resultArchiveTable td{padding:12px 13px;border-bottom:1px solid rgba(0,207,255,.12);color:#b9d0d5;text-align:left;font-size:8px}.resultArchiveTable th{color:#65e8ff;background:#041217;font-size:7px;letter-spacing:.06em}.resultArchiveTable a{color:#ffe600;font-weight:900}.resultModalBackdrop{position:fixed;z-index:10040;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.82);backdrop-filter:blur(8px)}.resultModal{position:relative;display:grid;gap:13px;width:min(620px,95vw);padding:28px;border:1px solid rgba(0,217,255,.35);border-radius:18px;background:linear-gradient(145deg,#071c24,#02090d);box-shadow:0 30px 100px #000}.resultModal>small{color:#ffe600;font-size:8px;font-weight:900;letter-spacing:.15em}.resultModal h2{margin:0;font-size:30px}.resultModal p{margin:0;color:#91aab0;font-size:9px}.resultModal label{display:grid;gap:7px}.resultModal label>span{color:#83a5ad;font-size:8px;font-weight:900}.resultModal textarea{min-height:100px;padding:12px;resize:vertical}.resultModalClose{position:absolute;right:14px;top:13px;width:34px;height:34px;border:1px solid #38515b;border-radius:8px;color:#fff;background:#10232b;font-size:20px}.resultPrizeInputs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}@keyframes pulse{50%{opacity:.35;transform:scale(.75)}}
           .handoverGrid{display:block!important;max-width:1460px}.handoverStudio{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(390px,.92fr);gap:18px;align-items:start}.handoverEditor,.handoverOutputPanel{overflow:hidden}.handoverBody{padding:24px}.handoverShiftTabs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}.handoverShiftTabs button{display:flex;align-items:center;justify-content:center;gap:10px;min-height:52px;border:1px solid rgba(0,207,255,.25);border-radius:11px;color:#9eb4ba;background:#071116;font:900 12px "Lexend",Arial,sans-serif}.handoverShiftTabs button small{padding:4px 7px;border-radius:99px;color:#8aa2a8;background:#101e24;font-size:8px}.handoverShiftTabs button.active{border-color:#ffe100;color:#071116;background:linear-gradient(135deg,#fff084,#ffe100);box-shadow:0 10px 28px rgba(255,225,0,.14)}.handoverShiftTabs button.active small{color:#fff;background:#13242b}.handoverComposer{padding:18px;border:1px solid rgba(0,207,255,.2);border-radius:14px;background:rgba(0,8,12,.55)}.handoverComposer label{display:grid;gap:9px}.handoverComposer label>span{color:#62e8ff;font-size:9px;font-weight:900;letter-spacing:.08em}.handoverComposer textarea,.handoverEntry textarea{width:100%;resize:vertical;border:1px solid rgba(0,207,255,.24);border-radius:10px;padding:14px;color:#eafcff;background:#020a0e;font:600 12px/1.65 "Lexend",Arial,sans-serif;outline:none}.handoverComposer textarea:focus,.handoverEntry textarea:focus{border-color:#00d9ff;box-shadow:0 0 0 3px rgba(0,217,255,.08)}.handoverAdd,.handoverCopy{width:100%;min-height:48px;margin-top:12px;font-family:"Lexend",Arial,sans-serif;font-weight:900}.handoverAdd:disabled,.handoverCopy:disabled{opacity:.42;cursor:not-allowed}.handoverEntries{display:grid;gap:12px;margin-top:18px}.handoverEmpty{padding:42px 20px;border:1px dashed rgba(0,207,255,.25);border-radius:12px;color:#77949a;text-align:center;font-size:11px}.handoverEntry{padding:15px;border:1px solid rgba(0,207,255,.21);border-radius:13px;background:linear-gradient(145deg,rgba(7,24,31,.85),rgba(2,9,13,.92))}.handoverEntryTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.handoverEntryTop strong{color:#ffe600;font-size:12px;letter-spacing:.08em}.handoverEntryTop div{display:flex;gap:6px}.handoverEntryTop button{min-width:31px;height:29px;border:1px solid rgba(0,207,255,.25);border-radius:7px;color:#bfeef5;background:#0d2027;font:900 10px "Lexend",Arial,sans-serif}.handoverEntryTop button.danger{padding:0 10px;border-color:rgba(255,71,94,.35);color:#ff8b99;background:#2b1016}.handoverEntryTop button:disabled{opacity:.3}.handoverEntry>small{display:block;margin-top:7px;color:#718a90;font-size:8px}.handoverOutputPanel{position:sticky;top:22px}.handoverOutput{min-height:520px;max-height:68vh;overflow:auto;margin:24px 24px 0;border:1px solid rgba(0,207,255,.23);border-radius:13px;background:#02090d}.handoverOutput pre{min-height:520px;margin:0;padding:24px;white-space:pre-wrap;overflow-wrap:anywhere;color:#effcff;font:600 12px/1.75 "Lexend",Arial,sans-serif}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 48px);margin-left:24px;margin-right:24px}.handoverClear{padding:10px 14px!important;font-size:9px!important}
           .ssPreviewBackdrop{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.88);backdrop-filter:blur(7px)}
           .ssPreviewModal{display:flex;flex-direction:column;width:min(1180px,96vw);height:min(94vh,980px);overflow:hidden;border:1px solid rgba(238,196,92,.55);border-radius:16px;background:#071019;box-shadow:0 30px 100px #000}
@@ -2792,9 +3111,11 @@ export default function Home() {
           .shell.lightMode .promptBox,.shell.lightMode .adjustedName,.shell.lightMode .resultMessageBox,.shell.lightMode .usdtOutput,.shell.lightMode .footballCode{border-color:rgba(0,145,180,.2)!important;background:#f7fcfd!important}.shell.lightMode .promptBox p,.shell.lightMode .resultMessageBox p,.shell.lightMode .usdtOutput pre,.shell.lightMode .footballCode textarea{color:#29474e!important;background:transparent!important}
           .shell.lightMode .secondary,.shell.lightMode .historyGrid button,.shell.lightMode .resultStats div{border-color:rgba(0,145,180,.22)!important;color:#315860!important;background:rgba(255,255,255,.68)!important}.shell.lightMode .userBar{border-color:rgba(0,145,180,.25)!important;background:rgba(244,252,253,.96)!important}.shell.lightMode .userBar span{color:#315860!important}
           .shell.lightMode .handoverComposer,.shell.lightMode .handoverEntry,.shell.lightMode .handoverOutput{border-color:rgba(0,145,180,.24)!important;background:#f7fcfd!important}.shell.lightMode .handoverComposer textarea,.shell.lightMode .handoverEntry textarea{color:#17383f!important;background:#fff!important}.shell.lightMode .handoverOutput pre{color:#17383f!important}.shell.lightMode .handoverEmpty{color:#58777e}
+          .shell.lightMode .resultMarketCard,.shell.lightMode .resultLiveClock,.shell.lightMode .resultMarketForm input,.shell.lightMode .resultMarketForm select,.shell.lightMode .resultFilters input,.shell.lightMode .resultFilters select{color:#17383f!important;background:#f7fcfd!important}.shell.lightMode .resultMarketCardTop h3,.shell.lightMode .resultMarketList b{color:#17383f!important}.shell.lightMode .resultSchedule>div,.shell.lightMode .resultPrizes>span,.shell.lightMode .resultAdminText{background:#fff!important}.shell.lightMode .resultModal{background:#edf9fb!important}.shell.lightMode .resultModal input,.shell.lightMode .resultModal textarea{color:#17383f!important;background:#fff!important}
           .shell.darkMode{color-scheme:dark}
-          @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}}
-          @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}}
+          @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
+          @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
+          @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}.resultTrackerHero{padding:18px}.resultLiveClock{width:100%}.resultMarketCards,.resultMarketForm,.resultPrizeInputs{grid-template-columns:1fr}.resultMarketList>div{grid-template-columns:1fr 1fr}.resultMarketList small{grid-column:1/-1}}
         `}</style>
       </main>
     </AuthGate>
