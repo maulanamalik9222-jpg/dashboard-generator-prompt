@@ -1290,13 +1290,13 @@ export default function Home() {
     const target = nowSeconds < closeSeconds ? closeSeconds : resultSeconds;
     const remaining = Math.max(0, target - nowSeconds);
     const countdown = `${String(Math.floor(remaining / 3600)).padStart(2, "0")}:${String(Math.floor((remaining % 3600) / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
-    const resultRemaining = Math.max(0, resultSeconds - nowSeconds);
-    const breakNote = resultRemaining > 25 * 60
+    const activeRemaining = remaining;
+    const breakNote = activeRemaining > 25 * 60
       ? "Waktu result masih di atas jam izin 20 menit, silakan smoke bray."
-      : resultRemaining > 0 && resultRemaining <= 20 * 60
+      : activeRemaining > 0 && activeRemaining <= 20 * 60
         ? "JANGAN NGULAR YA BRAY, BENTAR LAGI RESULT"
         : "";
-    const noteType = resultRemaining > 25 * 60 ? "relax" : resultRemaining > 0 && resultRemaining <= 20 * 60 ? "urgent" : "";
+    const noteType = activeRemaining > 25 * 60 ? "relax" : activeRemaining > 0 && activeRemaining <= 20 * 60 ? "urgent" : "";
     if (nowSeconds < closeSeconds)
       return { code: "open", text: "BELUM RESULT · BET BERJALAN", countdown: `PENDING · Bet tutup dalam ${countdown}`, breakNote, noteType };
     if (nowSeconds < resultSeconds)
