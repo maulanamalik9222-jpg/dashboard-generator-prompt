@@ -1,5 +1,20 @@
 import { currentUser, db } from "../../lib/auth";
 
+const LOCKED_SHIO_NUMBERS = [
+  "01, 13, 25, 37, 49, 61, 73, 85, 97",
+  "02, 14, 26, 38, 50, 62, 74, 86, 98",
+  "03, 15, 27, 39, 51, 63, 75, 87, 99",
+  "04, 16, 28, 40, 52, 64, 76, 88, 00",
+  "05, 17, 29, 41, 53, 65, 77, 89",
+  "06, 18, 30, 42, 54, 66, 78, 90",
+  "07, 19, 31, 43, 55, 67, 79, 91",
+  "08, 20, 32, 44, 56, 68, 80, 92",
+  "09, 21, 33, 45, 57, 69, 81, 93",
+  "10, 22, 34, 46, 58, 70, 82, 94",
+  "11, 23, 35, 47, 59, 71, 83, 95",
+  "12, 24, 36, 48, 60, 72, 84, 96",
+] as const;
+
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "cache-control": "no-store" } });
 
@@ -199,8 +214,9 @@ export async function POST(req: Request) {
     const year=Number(body.year);
     const settings=Array.isArray(body.settings)?body.settings:[];
     if(year<2020||year>2100||settings.length!==12) return json({error:"Tahun atau tabel shio belum lengkap."},400);
-    const normalized=settings.map((item:any)=>({name:String(item.name||"").trim().toUpperCase(),numbers:String(item.numbers||"").split(",").map((value:string)=>value.trim().padStart(2,"0")).filter((value:string)=>/^\d{2}$/.test(value)).join(", ")}));
-    if(normalized.some((item:any)=>!item.name||!item.numbers)) return json({error:"Nama shio dan daftar nomor wajib diisi."},400);
+    const normalized=settings.map((item:any,index:number)=>({name:String(item.name||"").trim().toUpperCase(),numbers:LOCKED_SHIO_NUMBERS[index]}));
+    if(normalized.some((item:any)=>!item.name)) return json({error:"Semua nama shio wajib diisi."},400);
+    if(new Set(normalized.map((item:any)=>item.name)).size!==12) return json({error:"Nama shio tidak boleh sama atau duplikat."},400);
     await db().prepare("DELETE FROM result_shio_settings WHERE year=?").bind(year).run();
     const now=Date.now();
     for(const item of normalized) await db().prepare("INSERT INTO result_shio_settings(year,shio_name,numbers,updated_at,updated_by) VALUES(?,?,?,?,?)").bind(year,item.name,item.numbers,now,user.id).run();
