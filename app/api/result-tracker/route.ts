@@ -35,6 +35,14 @@ async function ensureSchema() {
     db().prepare(
       "CREATE INDEX IF NOT EXISTS idx_result_records_date ON result_records(result_date)",
     ),
+    db().prepare(`CREATE TABLE IF NOT EXISTS result_shio_settings (
+      year INTEGER NOT NULL,
+      shio_name TEXT NOT NULL,
+      numbers TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      updated_by TEXT NOT NULL,
+      PRIMARY KEY(year,shio_name)
+    )`),
   ]);
   await db()
     .prepare("ALTER TABLE result_records ADD COLUMN is_cleared INTEGER NOT NULL DEFAULT 0")
@@ -71,6 +79,7 @@ export async function GET(req: Request) {
   const month = Number(url.searchParams.get("month") || 0);
   const year = Number(url.searchParams.get("year") || 0);
   const currentView = url.searchParams.get("view") === "current";
+  const shioYear = Number(url.searchParams.get("shioYear") || new Date().getFullYear());
 
   const markets = await db()
     .prepare(
@@ -98,10 +107,13 @@ export async function GET(req: Request) {
     statement = db().prepare(`${query} ORDER BY r.result_date DESC,m.shift,m.sort_order,m.name LIMIT 300`);
   }
   const records = await statement.all();
+  const shioSettings = await db().prepare("SELECT shio_name name,numbers FROM result_shio_settings WHERE year=? ORDER BY rowid").bind(shioYear).all();
   return json({
     markets: markets.results,
     records: records.results,
     canManage: await canManage(user),
+    shioYear,
+    shioSettings: shioSettings.results,
   });
 }
 
@@ -180,6 +192,19 @@ export async function POST(req: Request) {
       .bind(Date.now(), resultDate)
       .run();
     return json({ ok: true, archived: Number(update.meta?.changes || 0) });
+  }
+
+  if(action === "save-shio-settings"){
+    if(!(await canManage(user))) return json({error:"Hanya Master atau Asisten Master yang dapat mengatur shio."},403);
+    const year=Number(body.year);
+    const settings=Array.isArray(body.settings)?body.settings:[];
+    if(year<2020||year>2100||settings.length!==12) return json({error:"Tahun atau tabel shio belum lengkap."},400);
+    const normalized=settings.map((item:any)=>({name:String(item.name||"").trim().toUpperCase(),numbers:String(item.numbers||"").split(",").map((value:string)=>value.trim().padStart(2,"0")).filter((value:string)=>/^\d{2}$/.test(value)).join(", ")}));
+    if(normalized.some((item:any)=>!item.name||!item.numbers)) return json({error:"Nama shio dan daftar nomor wajib diisi."},400);
+    await db().prepare("DELETE FROM result_shio_settings WHERE year=?").bind(year).run();
+    const now=Date.now();
+    for(const item of normalized) await db().prepare("INSERT INTO result_shio_settings(year,shio_name,numbers,updated_at,updated_by) VALUES(?,?,?,?,?)").bind(year,item.name,item.numbers,now,user.id).run();
+    return json({ok:true});
   }
 
   return json({ error: "Aksi tidak dikenali." }, 400);

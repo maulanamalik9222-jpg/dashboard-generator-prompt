@@ -43,6 +43,21 @@ type ResultRecord = {
   updatedAt: number;
   updatedByName?: string;
 };
+type ShioSetting = { name: string; numbers: string };
+const DEFAULT_RESULT_SHIO: ShioSetting[] = [
+  {name:"KUDA",numbers:"01, 13, 25, 37, 49, 61, 73, 85, 97"},
+  {name:"ULAR",numbers:"02, 14, 26, 38, 50, 62, 74, 86, 98"},
+  {name:"NAGA",numbers:"03, 15, 27, 39, 51, 63, 75, 87, 99"},
+  {name:"KELINCI",numbers:"04, 16, 28, 40, 52, 64, 76, 88, 00"},
+  {name:"HARIMAU",numbers:"05, 17, 29, 41, 53, 65, 77, 89"},
+  {name:"KERBAU",numbers:"06, 18, 30, 42, 54, 66, 78, 90"},
+  {name:"TIKUS",numbers:"07, 19, 31, 43, 55, 67, 79, 91"},
+  {name:"BABI",numbers:"08, 20, 32, 44, 56, 68, 80, 92"},
+  {name:"ANJING",numbers:"09, 21, 33, 45, 57, 69, 81, 93"},
+  {name:"AYAM",numbers:"10, 22, 34, 46, 58, 70, 82, 94"},
+  {name:"MONYET",numbers:"11, 23, 35, 47, 59, 71, 83, 95"},
+  {name:"KAMBING",numbers:"12, 24, 36, 48, 60, 72, 84, 96"},
+];
 type FootballMatch = {
   time: string;
   date: string;
@@ -567,6 +582,9 @@ export default function Home() {
   const [resultFilterDate, setResultFilterDate] = useState(getWibIsoDate());
   const [resultFilterMonth, setResultFilterMonth] = useState(new Date().getMonth() + 1);
   const [resultFilterYear, setResultFilterYear] = useState(new Date().getFullYear());
+  const [resultShioYear,setResultShioYear]=useState(new Date().getFullYear());
+  const [resultShioSettings,setResultShioSettings]=useState<ShioSetting[]>(DEFAULT_RESULT_SHIO);
+  const [resultCopyId,setResultCopyId]=useState("");
   const monitorCaptureResolvers = useRef(
     new Map<
       string,
@@ -1175,7 +1193,7 @@ export default function Home() {
     setResultLoading(true);
     setResultError("");
     try {
-      const todayResponse = await fetch(`/api/result-tracker?date=${resultActiveDate}&view=current`, {
+      const todayResponse = await fetch(`/api/result-tracker?date=${resultActiveDate}&view=current&shioYear=${resultShioYear}`, {
         cache: "no-store",
       });
       const todayData = await todayResponse.json();
@@ -1185,6 +1203,7 @@ export default function Home() {
       setTodayResultRecords(
         Array.isArray(todayData.records) ? todayData.records : [],
       );
+      setResultShioSettings(Array.isArray(todayData.shioSettings)&&todayData.shioSettings.length===12?todayData.shioSettings:DEFAULT_RESULT_SHIO);
       if (kind !== "resultArchive") {
         setResultArchive([]);
         return;
@@ -1210,7 +1229,7 @@ export default function Home() {
   useEffect(() => {
     if (kind !== "resultTracker" && kind !== "resultArchive") return;
     loadResultTracker();
-  }, [kind, resultActiveDate, resultFilterMode, resultFilterDate, resultFilterMonth, resultFilterYear]);
+  }, [kind, resultActiveDate, resultFilterMode, resultFilterDate, resultFilterMonth, resultFilterYear, resultShioYear]);
 
   useEffect(() => {
     let activeDate = getWibIsoDate();
@@ -1327,6 +1346,35 @@ export default function Home() {
     const data = await response.json();
     if (!response.ok) return setResultError(data.error || "Result gagal disimpan.");
     setResultEditor(null);
+    await loadResultTracker();
+  };
+
+  const shioFromPrize=(prize:string)=>{
+    const digits=String(prize||"").replace(/\D/g,"");
+    if(!digits)return "-";
+    const tail=digits.slice(-2).padStart(2,"0");
+    return resultShioSettings.find(item=>item.numbers.split(",").map(value=>value.trim().padStart(2,"0")).includes(tail))?.name||"TIDAK DITEMUKAN";
+  };
+  const resultCopyText=(record:ResultRecord)=>{
+    const date=new Date(`${record.resultDate}T12:00:00+07:00`);
+    const dateText=new Intl.DateTimeFormat("id-ID",{timeZone:"Asia/Jakarta",weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(date);
+    const heading=`HASIL PENGELUARAN ${record.marketName.toUpperCase()}`;
+    const footer="Selamat Kepada Pemenang, Salam JP Hanya di TogelUP";
+    const hasMultiple=Boolean(record.prize2||record.prize3);
+    return hasMultiple
+      ? `${heading}\nHari Ini ${dateText.toUpperCase()}\nPrize 1 : ${record.prize1||"-"}\nPrize 2 : ${record.prize2||"-"}\nPrize 3 : ${record.prize3||"-"}\nSHIO : ${shioFromPrize(record.prize1)}\n${footer}`
+      : `${heading}\nHari Ini ${dateText.toUpperCase()}\nResult : ${record.prize1||"-"}\nSHIO : ${shioFromPrize(record.prize1)}\n${footer}`;
+  };
+  const copyResultAnnouncement=async(record:ResultRecord)=>{
+    await navigator.clipboard.writeText(resultCopyText(record));
+    setResultCopyId(record.id);
+    window.setTimeout(()=>setResultCopyId(""),1800);
+  };
+  const saveResultShioSettings=async()=>{
+    setResultError("");
+    const response=await fetch("/api/result-tracker",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"save-shio-settings",year:resultShioYear,settings:resultShioSettings})});
+    const data=await response.json();
+    if(!response.ok)return setResultError(data.error||"Pengaturan shio gagal disimpan.");
     await loadResultTracker();
   };
 
@@ -1779,6 +1827,7 @@ export default function Home() {
                           <div className="resultCountdown"><span className="pulseDot"/><b>{status.countdown}</b></div>
                           {status.breakNote && <div className={`resultBreakNote ${status.noteType || ""}`}><span>{status.noteType === "urgent" ? "⚡" : "☕"}</span><div><b>{status.noteType === "urgent" ? "SEBENTAR LAGI RESULT" : "WAKTU SANTAI"}</b><p>{status.breakNote}</p></div></div>}
                           {record && <div className="resultPrizes"><span><small>PRIZE 1</small><b>{record.prize1 || "-"}</b></span><span><small>PRIZE 2</small><b>{record.prize2 || "-"}</b></span><span><small>PRIZE 3</small><b>{record.prize3 || "-"}</b></span></div>}
+                          {record?.prize1 && <div className="resultReadyCopy"><small>TEKS HASIL SIAP KIRIM</small><pre>{resultCopyText(record)}</pre><button onClick={()=>copyResultAnnouncement(record)}>{resultCopyId===record.id?"✓ BERHASIL DISALIN":"SALIN HASIL"}</button></div>}
                           <div className="resultCardLinks">{market.officialUrl && <a href={market.officialUrl} target="_blank" rel="noreferrer">↗ SITUS RESMI</a>}{record?.officialLink && <a href={record.officialLink} target="_blank" rel="noreferrer">↗ LINK RESULT</a>}</div>
                           {record?.adminResult && <div className="resultAdminText"><small>HASIL RESULT ADMIN</small>{/^https?:\/\//i.test(record.adminResult.trim()) ? <a href={record.adminResult.trim()} target="_blank" rel="noreferrer">↗ LIHAT HASIL RESULT ADMIN</a> : <p>{record.adminResult}</p>}</div>}
                           <button className={status.code === "due" ? "primary dueButton" : "secondary"} onClick={() => openResultEditor(market)}>{record ? "EDIT HASIL RESULT" : status.code === "due" ? "INPUT HASIL SEKARANG" : "INPUT HASIL"}</button>
@@ -1815,6 +1864,12 @@ export default function Home() {
                   </div>
                   <div className="resultArchiveSummary"><span><small>TOTAL HASIL</small><b>{resultArchive.length}</b></span><span><small>PASARAN</small><b>{new Set(resultArchive.map((record) => record.marketId)).size}</b></span><span><small>PERIODE</small><b>{resultFilterMode === "day" ? resultFilterDate : `${String(resultFilterMonth).padStart(2, "0")}/${resultFilterYear}`}</b></span></div>
                   <div className="resultArchiveTable"><table><thead><tr><th>TANGGAL</th><th>SHIFT</th><th>PASARAN</th><th>PRIZE 1</th><th>PRIZE 2</th><th>PRIZE 3</th><th>LINK RESMI</th><th>HASIL ADMIN</th><th>UPDATE</th></tr></thead><tbody>{resultArchive.length ? resultArchive.map((record) => <tr key={record.id}><td>{record.resultDate}</td><td>{record.shift.toUpperCase()}</td><td>{record.marketName}</td><td>{record.prize1 || "-"}</td><td>{record.prize2 || "-"}</td><td>{record.prize3 || "-"}</td><td>{record.officialLink ? <a href={record.officialLink} target="_blank" rel="noreferrer">BUKA LINK RESMI</a> : "-"}</td><td>{record.adminResult ? (/^https?:\/\//i.test(record.adminResult.trim()) ? <a href={record.adminResult.trim()} target="_blank" rel="noreferrer">LIHAT HASIL ADMIN</a> : record.adminResult) : "-"}</td><td>{record.updatedByName || "-"}</td></tr>) : <tr><td colSpan={9}>Belum ada arsip pada filter ini.</td></tr>}</tbody></table></div>
+                </section>
+                <section className="panel resultShioPanel">
+                  <div className="panelHead"><div><span>02</span><h2>Pengaturan Shio Tahunan</h2></div><span className="live">● ACUAN SHIO PRIZE 1</span></div>
+                  <div className="resultShioToolbar"><label><span>TAHUN SHIO</span><input type="number" min="2020" max="2100" value={resultShioYear} onChange={(event)=>setResultShioYear(Number(event.target.value))}/></label><p>Sistem membaca dua digit terakhir Prize 1. Contoh 1235 dibaca 35 = MONYET.</p></div>
+                  <div className="resultShioGrid">{resultShioSettings.map((item,index)=><label key={`${item.name}-${index}`}><input className="shioName" value={item.name} disabled={!canManageUsers} onChange={(event)=>setResultShioSettings(old=>old.map((entry,i)=>i===index?{...entry,name:event.target.value.toUpperCase()}:entry))}/><input value={item.numbers} disabled={!canManageUsers} onChange={(event)=>setResultShioSettings(old=>old.map((entry,i)=>i===index?{...entry,numbers:event.target.value}:entry))}/></label>)}</div>
+                  {canManageUsers&&<button className="primary resultShioSave" onClick={saveResultShioSettings}>SIMPAN PENGATURAN SHIO {resultShioYear}</button>}
                 </section>
               </section>
             ) : kind === "handover" ? (
@@ -3241,6 +3296,7 @@ export default function Home() {
           .shell.lightMode .secondary,.shell.lightMode .historyGrid button,.shell.lightMode .resultStats div{border-color:rgba(0,145,180,.22)!important;color:#315860!important;background:rgba(255,255,255,.68)!important}.shell.lightMode .userBar{border-color:rgba(0,145,180,.25)!important;background:rgba(244,252,253,.96)!important}.shell.lightMode .userBar span{color:#315860!important}
           .shell.lightMode .handoverComposer,.shell.lightMode .handoverEntry,.shell.lightMode .handoverOutput{border-color:rgba(0,145,180,.24)!important;background:#f7fcfd!important}.shell.lightMode .handoverComposer textarea,.shell.lightMode .handoverEntry textarea{color:#17383f!important;background:#fff!important}.shell.lightMode .handoverOutput pre{color:#17383f!important}.shell.lightMode .handoverEmpty{color:#58777e}
           .resultResetAll{min-height:42px;padding:0 15px;border:1px solid #a63b4b;border-radius:9px;color:#ffd1d7;background:linear-gradient(135deg,#43141c,#240b10);font:900 9px "Lexend",Arial,sans-serif}.resultResetAll:hover{border-color:#ff6075;box-shadow:0 0 20px rgba(255,70,95,.18)}.resultArchiveStudio{display:grid;gap:18px}.resultArchiveSummary{display:grid;grid-template-columns:repeat(3,minmax(140px,220px));gap:10px;padding:0 18px 18px}.resultArchiveSummary>span{display:grid;gap:5px;padding:14px 16px;border:1px solid rgba(0,207,255,.2);border-radius:10px;background:#06171d}.resultArchiveSummary small{color:#7e9ba2;font-size:8px;font-weight:900}.resultArchiveSummary b{color:#fff;font-size:18px}.resultArchiveHero{margin-bottom:0}
+          .resultReadyCopy{display:grid;gap:8px;padding:12px;border:1px solid rgba(87,242,192,.3);border-radius:10px;background:#020b0e}.resultReadyCopy>small{color:#57f2c0;font-size:8px;font-weight:900;letter-spacing:.08em}.resultReadyCopy pre{max-height:145px;margin:0;overflow:auto;color:#eaffff;font:700 9px/1.55 "Lexend",Arial,sans-serif;white-space:pre-wrap}.resultReadyCopy button{min-height:38px;border:1px solid #42eab4;border-radius:7px;color:#001811;background:#57f2c0;font:900 9px "Lexend",Arial,sans-serif}.resultShioPanel{overflow:hidden}.resultShioToolbar{display:flex;align-items:end;gap:18px;padding:18px 20px}.resultShioToolbar label{display:grid;gap:7px}.resultShioToolbar span{color:#80a1a8;font-size:8px;font-weight:900}.resultShioToolbar input{width:150px;min-height:42px;padding:0 11px;border:1px solid rgba(0,207,255,.25);border-radius:8px;color:#fff;background:#020b0f;font:800 11px "Lexend",Arial,sans-serif}.resultShioToolbar p{margin:0 0 10px;color:#8faab0;font-size:9px}.resultShioGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 20px 20px}.resultShioGrid label{display:grid;grid-template-columns:130px 1fr;gap:8px}.resultShioGrid input{min-width:0;min-height:42px;padding:0 11px;border:1px solid rgba(0,207,255,.2);border-radius:8px;color:#dffaff;background:#031116;font:700 9px "Lexend",Arial,sans-serif}.resultShioGrid .shioName{color:#ffe600;font-weight:900}.resultShioGrid input:disabled{opacity:.82}.resultShioSave{margin:0 20px 20px;min-height:44px}.shell.lightMode .resultReadyCopy,.shell.lightMode .resultShioGrid input,.shell.lightMode .resultShioToolbar input{color:#17383f!important;background:#fff!important}.shell.lightMode .resultReadyCopy pre{color:#17383f!important}
           .resultMarketCard{gap:15px;padding:20px}.resultMarketCardTop small{font-size:9px}.resultMarketCardTop h3{font-size:20px;line-height:1.25}.resultMarketCardTop>span{padding:7px 9px;font-size:9px;line-height:1.35}.resultSchedule>div,.resultPrizes>span{padding:12px}.resultSchedule small,.resultPrizes small,.resultAdminText small{font-size:8px;letter-spacing:.04em}.resultSchedule b{font-size:14px}.resultCountdown{font-size:10px}.resultPrizes b{font-size:20px}.resultCardLinks{gap:8px}.resultCardLinks a{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 11px;font-size:9px}.resultAdminText{gap:8px;padding:12px;font-size:10px;line-height:1.55}.resultAdminText a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 11px;border:1px solid #28b9d5;border-radius:7px;color:#70e9ff;background:#061a21;font-size:10px;font-weight:900;text-decoration:none}.resultAdminText a:hover{border-color:#ffe600;color:#ffe600}.resultAdminText p{margin:0;color:#e5f5f7;font-size:10px;line-height:1.6}.resultMarketCard>button{min-height:44px;font-size:10px;font-weight:900}.resultArchiveTable th,.resultArchiveTable td{font-size:10px}.resultArchiveTable th{font-size:9px}.resultArchiveTable a{display:inline-flex;padding:6px 8px;border:1px solid rgba(0,207,255,.25);border-radius:6px;text-decoration:none}
           .resultMarketCard{position:relative;overflow:hidden;border-width:2px}.resultMarketCard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#1ec8ef}.resultMarketCard.status-done{border-color:#28e7a7;background:linear-gradient(145deg,#08251f,#020d0b);box-shadow:0 0 25px rgba(40,231,167,.12)}.resultMarketCard.status-done::before{background:#31eca9;box-shadow:0 0 16px #31eca9}.resultMarketCard.status-open{border-color:#177ca0;background:linear-gradient(145deg,#071f2a,#020c11)}.resultMarketCard.status-open::before{background:#28c9f5}.resultMarketCard.status-waiting{border-color:#d79c22;background:linear-gradient(145deg,#2a2108,#100c02)}.resultMarketCard.status-waiting::before{background:#ffd84a;box-shadow:0 0 15px #ffd84a}.resultMarketCard.status-due{border-color:#ff5068;background:linear-gradient(145deg,#321018,#120408);animation:resultDueGlow 1.8s ease-in-out infinite}.resultMarketCard.status-due::before{background:#ff536b;box-shadow:0 0 18px #ff536b}.status-open .resultMarketCardTop>span{color:#7eeaff;background:#0c3542}.status-waiting .resultMarketCardTop>span{color:#ffe681;background:#4a3509}.status-due .resultMarketCardTop>span{color:#fff;background:#a91f37}.resultMarketCardTop>span{max-width:58%;font-size:10px}.resultSchedule small{font-size:9px}.resultSchedule b{font-size:17px}.resultCountdown{min-height:34px;padding:8px 10px;border-radius:8px;font-size:11px;font-weight:900}.status-done .resultCountdown{color:#67f0bf;background:rgba(27,158,113,.12)}.status-open .resultCountdown{color:#8cecff;background:rgba(19,150,187,.11)}.status-waiting .resultCountdown{color:#ffe681;background:rgba(213,157,32,.13)}.status-due .resultCountdown{color:#ff9dab;background:rgba(222,49,76,.16)}.resultBreakNote{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid rgba(255,216,74,.35);border-radius:10px;color:#ffe681;background:linear-gradient(135deg,rgba(107,75,8,.32),rgba(34,23,2,.62));box-shadow:inset 0 0 18px rgba(255,208,50,.05)}.resultBreakNote>span{font-size:21px}.resultBreakNote>div{display:grid;gap:4px}.resultBreakNote b{font-size:10px;letter-spacing:.08em}.resultBreakNote p{margin:0;color:#f7e7a6;font-size:10px;line-height:1.45}@keyframes resultDueGlow{50%{box-shadow:0 0 32px rgba(255,65,91,.28)}}
           .resultBreakNote.urgent{border-color:rgba(255,83,107,.65);color:#fff;background:linear-gradient(135deg,rgba(154,22,44,.72),rgba(61,7,16,.88));box-shadow:0 0 24px rgba(255,67,94,.18);animation:urgentNotePulse 1.4s ease-in-out infinite}.resultBreakNote.urgent b{color:#fff}.resultBreakNote.urgent p{color:#ffdce2;font-size:11px;font-weight:900}@keyframes urgentNotePulse{50%{border-color:#ff8999;box-shadow:0 0 30px rgba(255,67,94,.32)}}
