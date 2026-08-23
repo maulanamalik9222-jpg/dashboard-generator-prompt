@@ -16,6 +16,8 @@ const emailValid = (email: string) => /^\S+@\S+\.\S+$/.test(email);
 const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor","handover","resultTracker","resultArchive"] as const;
 async function ensureMenuAccessTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_menu_access (user_id TEXT NOT NULL,menu_id TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,updated_at INTEGER NOT NULL,PRIMARY KEY (user_id,menu_id))`).run()}
 async function ensureStaffRoleTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_staff_roles (user_id TEXT PRIMARY KEY,staff_role TEXT NOT NULL DEFAULT 'staff' CHECK(staff_role IN ('assistant','staff')),updated_at INTEGER NOT NULL)`).run()}
+async function ensureApprovalTable(){await db().prepare(`CREATE TABLE IF NOT EXISTS user_approvals (user_id TEXT PRIMARY KEY,approval_status TEXT NOT NULL DEFAULT 'pending' CHECK(approval_status IN ('pending','approved')),requested_at INTEGER NOT NULL,approved_at INTEGER,approved_by TEXT)`).run()}
+async function approvalFor(userId:string){await ensureApprovalTable();const row=await db().prepare("SELECT approval_status FROM user_approvals WHERE user_id=?").bind(userId).first<{approval_status:string}>();return row?.approval_status === "pending" ? "pending" : "approved"}
 async function staffRoleFor(userId:string,role:string){if(role==="admin")return "master";await ensureStaffRoleTable();const row=await db().prepare("SELECT staff_role FROM user_staff_roles WHERE user_id=?").bind(userId).first<{staff_role:string}>();return row?.staff_role==="assistant"?"assistant":"staff"}
 async function menuAccessFor(userId:string,role:string){if(role==="admin"||(await staffRoleFor(userId,role))==="assistant")return [...MENU_IDS];await ensureMenuAccessTable();const rows=await db().prepare("SELECT menu_id,enabled FROM user_menu_access WHERE user_id=?").bind(userId).all<{menu_id:string;enabled:number}>();if(!rows.results.length)return [...MENU_IDS];return rows.results.filter(row=>Number(row.enabled)===1).map(row=>row.menu_id).filter(id=>MENU_IDS.includes(id as (typeof MENU_IDS)[number]))}
 
@@ -79,10 +81,15 @@ export async function POST(req: Request) {
         Date.now(),
       )
       .run();
+    // Akun master pertama tetap langsung aktif. Semua pendaftar berikutnya
+    // wajib menunggu persetujuan master sebelum dapat masuk.
+    if(role !== "admin"){
+      await ensureApprovalTable();
+      await db().prepare("INSERT INTO user_approvals(user_id,approval_status,requested_at) VALUES(?,?,?)").bind(id,"pending",Date.now()).run();
+      return json({ ok:true, pending:true, message:"Pendaftaran berhasil. Akun menunggu persetujuan master." },201);
+    }
     const session = await issueSession(id);
-    return json({ ok: true, role }, 201, {
-      "Set-Cookie": cookie(session.token),
-    });
+    return json({ ok: true, role }, 201, { "Set-Cookie": cookie(session.token) });
   }
 
   if (action === "login") {
@@ -99,6 +106,8 @@ export async function POST(req: Request) {
       (await hashPassword(password, user.password_salt)) !== user.password_hash
     )
       return json({ error: "Email atau password salah." }, 401);
+    if(user.role !== "admin" && (await approvalFor(user.id)) !== "approved")
+      return json({ error: "Akun belum disetujui master. Silakan tunggu persetujuan." }, 403);
     if (user.status !== "active")
       return json({ error: "Akun disuspend, hubungi master." }, 403);
     const session = await issueSession(user.id);
@@ -127,7 +136,7 @@ export async function POST(req: Request) {
         "SELECT id,name,email,role,status,created_at FROM users ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END, created_at DESC",
       )
       .all();
-    const users=await Promise.all((result.results as any[]).map(async listedUser=>({...listedUser,staffRole:await staffRoleFor(listedUser.id,listedUser.role),access:await menuAccessFor(listedUser.id,listedUser.role)})));
+    const users=await Promise.all((result.results as any[]).map(async listedUser=>({...listedUser,approvalStatus:listedUser.role==="admin"?"approved":await approvalFor(listedUser.id),staffRole:await staffRoleFor(listedUser.id,listedUser.role),access:await menuAccessFor(listedUser.id,listedUser.role)})));
     return json({ users, canSetRole: master.role==="admin" });
   }
 
@@ -141,6 +150,13 @@ export async function POST(req: Request) {
   if (!target) return json({ error: "Pengguna tidak ditemukan." }, 404);
   if (target.role === "admin")
     return json({ error: "Akun master tidak dapat diubah dari panel ini." }, 403);
+
+  if(action === "approve-user"){
+    if(master.role !== "admin") return json({error:"Hanya master yang dapat menyetujui akun baru."},403);
+    await ensureApprovalTable();
+    await db().prepare("INSERT INTO user_approvals(user_id,approval_status,requested_at,approved_at,approved_by) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET approval_status='approved',approved_at=excluded.approved_at,approved_by=excluded.approved_by").bind(target.id,"approved",Date.now(),Date.now(),master.id).run();
+    return json({ok:true});
+  }
 
   if (action === "update-user") {
     if (target.id === master.id)
@@ -239,6 +255,8 @@ export async function POST(req: Request) {
     await db().prepare("DELETE FROM user_menu_access WHERE user_id=?").bind(target.id).run();
     await ensureStaffRoleTable();
     await db().prepare("DELETE FROM user_staff_roles WHERE user_id=?").bind(target.id).run();
+    await ensureApprovalTable();
+    await db().prepare("DELETE FROM user_approvals WHERE user_id=?").bind(target.id).run();
     await db().prepare("DELETE FROM users WHERE id=?").bind(target.id).run();
     return json({ ok: true });
   }

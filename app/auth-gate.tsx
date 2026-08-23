@@ -11,6 +11,7 @@ type User = {
   created_at?: number;
   access?: string[];
   staffRole?: "master" | "assistant" | "staff";
+  approvalStatus?: "pending" | "approved";
 };
 const MENU_ACCESS_OPTIONS = [["kemenangan","Postingan Kemenangan"],["syair","Postingan Syair"],["prediksi","Postingan Prediksi"],["jadwal","Perubahan Jadwal"],["validasi","Validasi Dana"],["usdt","Update USDT"],["result","Keterlambatan Result"],["bola","Prediksi Bola"],["monitor","Cek Link Situs Otomatis"],["handover","Data Serah Terima"],["resultTracker","Result Pasaran"],["resultArchive","Arsip Hasil Result"]] as const;
 
@@ -42,6 +43,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [managementOpen, setManagementOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [managementError, setManagementError] = useState("");
@@ -102,11 +104,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const submittedForm = event.currentTarget;
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await api({ action: mode, ...Object.fromEntries(form) });
-      await load();
+      const data=await api({ action: mode, ...Object.fromEntries(form) });
+      if(mode === "register" && data.pending){
+        setMode("login");
+        setNotice(data.message || "Pendaftaran berhasil. Tunggu persetujuan master.");
+        submittedForm.reset();
+      }else await load();
     } catch (cause: any) {
       setError(cause.message);
     }
@@ -169,7 +176,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           <p>
             {mode === "login"
               ? "Gunakan email dan password Anda."
-              : "Akun langsung aktif setelah pendaftaran."}
+              : "Akun baru harus disetujui Master sebelum dapat masuk."}
           </p>
           {mode === "register" && (
             <input name="name" placeholder="Nama lengkap" required />
@@ -183,11 +190,13 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             required
           />
           {error && <b className="authError">{error}</b>}
+          {notice && <b className="authNotice">{notice}</b>}
           <button>{mode === "login" ? "Masuk" : "Daftar Sekarang"}</button>
           <a
             onClick={() => {
               setMode(mode === "login" ? "register" : "login");
               setError("");
+              setNotice("");
             }}
           >
             {mode === "login"
@@ -225,7 +234,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             </button>
             <header className="userManagementHead">
               <span>MASTER CONTROL</span>
-              <h2>Manajemen User</h2>
+              <h2>Kontrol User</h2>
               <p>
                 Kelola pengguna terdaftar, status login, data akun, dan reset
                 password.
@@ -243,6 +252,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             <div className="managementUsers">
               {users.map((target) => {
                 const active = target.status === "active";
+                const pending = target.approvalStatus === "pending";
                 const isMaster = target.role === "admin";
                 return (
                   <div className="managementUserRow" key={target.id}>
@@ -255,15 +265,20 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                     </div>
                     <div>
                       <span
-                        className={active ? "statusActive" : "statusInactive"}
+                        className={pending ? "statusPending" : active ? "statusActive" : "statusInactive"}
                       >
-                        {active ? "AKTIF" : "TIDAK AKTIF"}
+                        {pending ? "MENUNGGU" : active ? "AKTIF" : "TIDAK AKTIF"}
                       </span>
                     </div>
                     <div><span className={`roleBadge role-${isMaster ? "master" : target.staffRole === "assistant" ? "assistant" : "staff"}`}>{isMaster ? "MASTER" : target.staffRole === "assistant" ? "ASISTEN MASTER" : "STAFF"}</span></div>
                     <div className="managementActions">
                       {isMaster ? (
                         <em>Khusus MASTER</em>
+                      ) : pending ? (
+                        user.role === "admin" ? <>
+                          <button className="approveAccess" disabled={busyId===target.id} onClick={()=>runUserAction(target,"approve-user")}>Setujui Akun</button>
+                          <button className="deleteAccess" disabled={busyId===target.id} onClick={()=>{if(confirm(`Tolak dan hapus pendaftaran ${target.name}?`))runUserAction(target,"delete-user")}}>Tolak</button>
+                        </> : <em>Menunggu persetujuan MASTER</em>
                       ) : (
                         <>
                           <button
@@ -414,6 +429,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         .userTableHead,.managementUserRow{display:grid;grid-template-columns:minmax(250px,1.15fr) 135px 165px minmax(390px,1.5fr);align-items:center;gap:18px;font-family:"Lexend",Arial,sans-serif}.userTableHead{padding:17px 30px;color:#9bbbc2;background:#061016;font-size:11px;font-weight:800;letter-spacing:.08em}.managementUsers{max-height:calc(100vh - 300px);min-height:230px;overflow:auto}.managementUserRow{min-height:100px;padding:17px 30px;border-top:1px solid rgba(0,217,255,.11)}.managementUserRow:hover{background:rgba(0,217,255,.04)}.managementIdentity{display:flex;align-items:center;gap:15px}.managementIdentity i{width:50px;height:50px;display:grid;place-items:center;border:1px solid rgba(0,217,255,.32);border-radius:14px;color:#00d9ff;background:linear-gradient(145deg,#12303a,#07161d);font-family:"Lexend",Arial,sans-serif;font-size:17px;font-style:normal;font-weight:900}.managementIdentity b,.managementIdentity small{display:block}.managementIdentity b{color:#edfaff;font-size:16px;line-height:1.25}.managementIdentity small{margin-top:5px;color:#86a5ad;font-size:11px}.statusActive,.statusInactive{display:inline-flex;min-width:108px;justify-content:center;padding:10px 14px;border-radius:99px;font-family:"Lexend",Arial,sans-serif;font-size:10px;font-weight:900}.statusActive{color:#001910;background:#34dfa0;box-shadow:0 0 18px #34dfa033}.statusInactive{color:#fff;background:#d93f55;box-shadow:0 0 18px #d93f5533}.managementActions{display:flex;flex-wrap:wrap;gap:9px}.managementActions button{min-height:38px;padding:10px 14px;border:1px solid rgba(0,217,255,.28);border-radius:9px;color:#00161b;background:#35d5d1;font-family:"Lexend",Arial,sans-serif;font-size:10px;font-weight:900}.managementActions button:disabled{opacity:.45}.managementActions .resetAccess{background:#a88aff}.managementActions .suspendAccess{background:#ffb343}.managementActions .activateAccess{background:#38dfa1}.managementActions .deleteAccess{color:#fff;background:#a9273b}.managementActions em{color:#ffe600;font-size:13px;font-style:normal;font-weight:900}.userEditorModal{z-index:320}.userEditor{position:relative;width:min(540px,94vw);padding:30px;border:1px solid rgba(0,217,255,.34);border-radius:18px;color:#fff;background:linear-gradient(145deg,#0b2029,#030a0e);box-shadow:0 30px 100px #000}.userEditor label{display:grid;gap:8px;margin-top:18px;color:#a8c2c9;font-family:"Lexend",Arial,sans-serif;font-size:11px;font-weight:800}.userEditor input,.userEditor select{width:100%;padding:14px;border:1px solid rgba(0,217,255,.24);border-radius:9px;color:#fff;background:#020a0e;font-family:"Lexend",Arial,sans-serif;font-size:12px}.userEditor>div{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}.userEditor>div button{padding:12px 16px;border:1px solid #52636a;border-radius:9px;color:#dfecef;background:#18272d;font-family:"Lexend",Arial,sans-serif;font-size:10px;font-weight:900}.userEditor>div .saveUser{color:#001317;background:linear-gradient(135deg,#ffe600,#00d9ff)}
         .roleBadge{display:inline-flex;min-width:118px;justify-content:center;padding:10px 13px;border-radius:99px;font-family:"Lexend",Arial,sans-serif;font-size:9px;font-weight:900}.role-master{color:#241700;background:#ffe600}.role-assistant{color:#001b22;background:linear-gradient(90deg,#00d9ff,#34dfa0)}.role-staff{color:#fff;background:#6658cc}.userEditor select:disabled{opacity:.6}
         .menuAccessControl{margin:22px 0 0;padding:18px;border:1px solid rgba(0,217,255,.24);border-radius:13px;background:rgba(0,217,255,.035)}.menuAccessControl legend{padding:0 8px;color:#ffe600;font-family:"Lexend",Arial,sans-serif;font-size:12px;font-weight:900}.menuAccessControl>p{margin:0 0 13px;color:#86a5ad;font-size:10px}.menuAccessControl>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.userEditor .menuAccessOption{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:11px 12px;border:1px solid rgba(0,217,255,.16);border-radius:9px;background:#06141a}.menuAccessOption span,.menuAccessOption b,.menuAccessOption small{display:block}.menuAccessOption b{color:#eaffff;font-size:10px}.menuAccessOption small{margin-top:4px;color:#38dfa1;font-size:7px;font-weight:900}.menuAccessOption:has(input:not(:checked)) small{color:#ff7888}.userEditor .menuAccessOption input{appearance:none;width:42px;height:23px;margin:0;padding:0;border:1px solid #49636b!important;border-radius:99px;background:#17272d!important;cursor:pointer}.userEditor .menuAccessOption input::before{content:"";display:block;width:17px;height:17px;margin:2px;border-radius:50%;background:#81959b;transition:.2s}.userEditor .menuAccessOption input:checked{border-color:#23dba0!important;background:#116d57!important}.userEditor .menuAccessOption input:checked::before{transform:translateX(18px);background:#3dffbd;box-shadow:0 0 10px #3dffbd}.userEditorModal .userEditor{max-height:92vh;overflow:auto}
+        .teamUpAuthCard .authNotice{display:block;margin-top:12px;padding:12px;border:1px solid rgba(52,223,160,.45);border-radius:10px;color:#79f6c7;background:rgba(21,100,76,.2);font-size:11px;line-height:1.5}.statusPending{display:inline-flex;min-width:108px;justify-content:center;padding:10px 14px;border-radius:99px;color:#2b2100;background:#ffd55d;box-shadow:0 0 18px #ffd55d33;font-family:"Lexend",Arial,sans-serif;font-size:10px;font-weight:900}.managementActions .approveAccess{background:#34dfa0}
         @keyframes managementTitleFlow{to{background-position:320% 50%}}
         [data-theme="light"] .userManagementModal{background:radial-gradient(circle at 86% 0,rgba(0,196,255,.15),transparent 34%),radial-gradient(circle at 58% 82%,rgba(255,225,0,.12),transparent 31%),#edf8fa}[data-theme="light"] .userManagementBox{border-color:rgba(0,145,180,.28);background:linear-gradient(145deg,#fff,#e8f5f7);box-shadow:0 24px 65px rgba(20,94,109,.15)}[data-theme="light"] .userManagementHead{background:radial-gradient(circle at 80% 0,rgba(0,196,255,.13),transparent 45%)}[data-theme="light"] .userManagementHead p{color:#496c74}[data-theme="light"] .userTableHead{color:#385d65;background:#dceff2}[data-theme="light"] .managementUserRow{border-color:rgba(0,145,180,.15)}[data-theme="light"] .managementIdentity b{color:#16343b}[data-theme="light"] .managementIdentity small{color:#66858c}
         @media(max-width:900px){.userManagementModal{inset:0;padding:18px}.userTableHead{display:none}.managementUserRow{grid-template-columns:1fr;gap:14px;padding:20px}.managementActions{justify-content:flex-start}.userManagementHead{padding:26px 22px}.managementUsers{max-height:none}.userManagementHead h2{font-size:27px!important}.menuAccessControl>div{grid-template-columns:1fr}}

@@ -1584,8 +1584,8 @@ export default function Home() {
                   >
                     <i>♙</i>
                     <span>
-                      <b>Manajemen User</b>
-                      <small>Kontrol akun pengguna</small>
+                      <b>Kontrol User</b>
+                      <small>Persetujuan dan kontrol akun</small>
                     </span>
                   </button>
                 </nav>
