@@ -40,6 +40,8 @@ async function ensureSchema() {
       prize_2 TEXT NOT NULL DEFAULT '',
       prize_3 TEXT NOT NULL DEFAULT '',
       official_link TEXT NOT NULL DEFAULT '',
+      red_reference_link TEXT NOT NULL DEFAULT '',
+      blue_reference_link TEXT NOT NULL DEFAULT '',
       admin_result TEXT NOT NULL DEFAULT '',
       updated_by TEXT NOT NULL,
       updated_by_name TEXT NOT NULL DEFAULT '',
@@ -63,6 +65,8 @@ async function ensureSchema() {
     .prepare("ALTER TABLE result_records ADD COLUMN is_cleared INTEGER NOT NULL DEFAULT 0")
     .run()
     .catch(() => null);
+  await db().prepare("ALTER TABLE result_records ADD COLUMN red_reference_link TEXT NOT NULL DEFAULT ''").run().catch(() => null);
+  await db().prepare("ALTER TABLE result_records ADD COLUMN blue_reference_link TEXT NOT NULL DEFAULT ''").run().catch(() => null);
 }
 
 async function canManage(user: any) {
@@ -107,7 +111,7 @@ export async function GET(req: Request) {
   let query = `SELECT r.id,r.market_id marketId,m.name marketName,m.shift,
     r.result_date resultDate,m.close_time closeTime,m.result_time resultTime,
     r.prize_1 prize1,r.prize_2 prize2,r.prize_3 prize3,
-    r.official_link officialLink,r.admin_result adminResult,
+    r.official_link officialLink,r.red_reference_link redReferenceLink,r.blue_reference_link blueReferenceLink,r.admin_result adminResult,
     r.updated_at updatedAt,r.updated_by_name updatedByName
     FROM result_records r JOIN result_markets m ON m.id=r.market_id`;
   let statement;
@@ -184,15 +188,17 @@ export async function POST(req: Request) {
     const prize2 = String(body.prize2 || "").trim();
     const prize3 = String(body.prize3 || "").trim();
     const officialLink = String(body.officialLink || "").trim();
+    const redReferenceLink = String(body.redReferenceLink || "").trim();
+    const blueReferenceLink = String(body.blueReferenceLink || "").trim();
     const adminResult = String(body.adminResult || "").trim();
     const now = Date.now();
     const existing = await db().prepare("SELECT id FROM result_records WHERE market_id=? AND result_date=?").bind(marketId,resultDate).first<{id:string}>();
     if (existing) {
-      await db().prepare(`UPDATE result_records SET prize_1=?,prize_2=?,prize_3=?,official_link=?,admin_result=?,updated_by=?,updated_by_name=?,updated_at=?,is_cleared=0 WHERE id=?`)
-        .bind(prize1,prize2,prize3,officialLink,adminResult,user.id,user.name,now,existing.id).run();
+      await db().prepare(`UPDATE result_records SET prize_1=?,prize_2=?,prize_3=?,official_link=?,red_reference_link=?,blue_reference_link=?,admin_result=?,updated_by=?,updated_by_name=?,updated_at=?,is_cleared=0 WHERE id=?`)
+        .bind(prize1,prize2,prize3,officialLink,redReferenceLink,blueReferenceLink,adminResult,user.id,user.name,now,existing.id).run();
     } else {
-      await db().prepare(`INSERT INTO result_records(id,market_id,result_date,prize_1,prize_2,prize_3,official_link,admin_result,updated_by,updated_by_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .bind(crypto.randomUUID(),marketId,resultDate,prize1,prize2,prize3,officialLink,adminResult,user.id,user.name,now,now).run();
+      await db().prepare(`INSERT INTO result_records(id,market_id,result_date,prize_1,prize_2,prize_3,official_link,red_reference_link,blue_reference_link,admin_result,updated_by,updated_by_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(crypto.randomUUID(),marketId,resultDate,prize1,prize2,prize3,officialLink,redReferenceLink,blueReferenceLink,adminResult,user.id,user.name,now,now).run();
     }
     return json({ ok: true });
   }
