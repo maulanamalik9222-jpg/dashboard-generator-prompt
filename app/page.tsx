@@ -270,7 +270,7 @@ const initial: FormState = {
   colokBebas: "4, 1",
   top4d: "1507, 1861, 3016",
   isiSyair:
-    "Kabut tipis turun perlahan\nSuara angin membawa pesan\nPilih angka penuh keyakinan\nSemoga hasil jadi harapan",
+    "Kelinci putih melompat tenang\nMeniti taman diterpa terang\nTelinga tajam menangkap petunjuk\nJejak keberuntungan mulai terbentuk",
   predBbfs: "718537",
   predAngkaMain: "28585",
   pred4d: "9600, 6003, 6587, 6531",
@@ -374,6 +374,57 @@ const shioBank = [
   "MONYET",
   "KAMBING",
 ];
+
+const syairByShio: Record<string, string[]> = {
+  KUDA: [
+    "Kuda perkasa berlari kencang\nMenerjang kabut menuju terang\nDerap langkah membawa petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Kuda hitam melintas malam\nTapak berkilau di tanah kelam\nAngin berbisik membuka jalan\nTanda keberuntungan datang perlahan",
+  ],
+  ULAR: [
+    "Ular zamrud melingkar sunyi\nSisik bercahaya menyimpan arti\nGeraknya tenang membaca arah\nPetunjuk rahasia mulai merekah",
+    "Ular emas turun perlahan\nMenyusuri batu penuh ramalan\nDesis halus membawa pesan\nAngka pilihan hadir berurutan",
+  ],
+  NAGA: [
+    "Naga langit terbang berputar\nMembelah awan memancarkan sinar\nRaung agung membuka petunjuk\nTakdir keberuntungan mulai terbentuk",
+    "Naga emas menjaga gerbang\nApi biru menyala terang\nSisik berkilau memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  KELINCI: [
+    "Kelinci putih melompat tenang\nMeniti taman diterpa terang\nTelinga tajam menangkap petunjuk\nJejak keberuntungan mulai terbentuk",
+    "Kelinci bulan duduk berseri\nMenjaga rahasia di malam sunyi\nLangkah kecil meninggalkan tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  HARIMAU: [
+    "Harimau loreng turun ke lembah\nTatapan tajam membaca arah\nAuman malam membuka petunjuk\nJejak keberuntungan mulai terbentuk",
+    "Harimau emas menjaga hutan\nMelangkah gagah penuh keyakinan\nCakar bercahaya memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  KERBAU: [
+    "Kerbau perkasa membelah ladang\nLangkahnya teguh menuju terang\nTanduk mengarah membawa petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Kerbau hitam berjalan pelan\nMenembus kabut di perbukitan\nJejak kuat meninggalkan tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  TIKUS: [
+    "Tikus lincah keluar malam\nMencari jalan di lorong kelam\nMata kecil menangkap petunjuk\nJejak keberuntungan mulai terbentuk",
+    "Tikus putih menjaga peti\nMenyimpan rahasia penuh arti\nGerak cepat meninggalkan tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  BABI: [
+    "Babi hutan melintas pelan\nMembuka jalan di balik semak malam\nLangkah tenang membawa petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Babi emas berdiri teguh\nMenjaga taman berembun penuh\nTanah bergetar memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  ANJING: [
+    "Anjing penjaga menatap malam\nMendengar bisikan dari kejauhan\nKesetiaannya membaca petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Anjing putih berdiri siaga\nMenjaga gerbang penuh cahaya\nJejak langkah memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  AYAM: [
+    "Ayam jantan berseru pagi\nMembangunkan alam penuh energi\nKepak sayap membawa petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Ayam emas berdiri tinggi\nMenyambut fajar yang berseri\nKokok nyaring memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  MONYET: [
+    "Monyet lincah melompat tinggi\nMembaca ranting penuh misteri\nGerak cerdik membawa petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Monyet emas duduk di dahan\nMenatap bintang penuh ramalan\nTangan lincah memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+  KAMBING: [
+    "Kambing gunung mendaki tinggi\nMenembus awan di pagi hari\nTanduk kokoh membawa petunjuk\nJalur keberuntungan mulai terbentuk",
+    "Kambing putih di puncak bukit\nMenatap lembah saat fajar terbit\nLangkah pasti memberi tanda\nPetunjuk pilihan hadir di mata",
+  ],
+};
 
 function pickDifferent(list: string[], current: string) {
   const choices = list.filter((item) => item !== current);
@@ -1432,6 +1483,7 @@ export default function Home() {
       if (kind !== "syair") return generated;
 
       const directions = randomUniqueNumbers(4, 10, 1);
+      const nextShio = pickDifferent(shioBank, old.shio);
       return {
         ...generated,
         bb2d: randomUniqueNumbers(4, 100, 2).join(", "),
@@ -1442,7 +1494,8 @@ export default function Home() {
         bbfs: randomUniqueNumbers(2, 10, 1).join(", "),
         colokBebas: randomUniqueNumbers(2, 10, 1).join(", "),
         top4d: randomUniqueNumbers(3, 10_000, 4).join(", "),
-        shio: pickDifferent(shioBank, old.shio),
+        shio: nextShio,
+        isiSyair: pickDifferent(syairByShio[nextShio] || syairByShio.KELINCI, old.isiSyair),
       };
     });
     setCopied(false);
@@ -2953,10 +3006,11 @@ export default function Home() {
                         />
                         <div className="wide">
                           <Field
-                            label="Isi Syair"
+                            label="Isi Syair (Otomatis Sesuai Shio)"
                             value={form.isiSyair}
                             onChange={update("isiSyair")}
                             area
+                            readOnly
                           />
                         </div>
                       </>
