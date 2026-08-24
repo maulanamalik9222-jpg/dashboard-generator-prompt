@@ -27,6 +27,9 @@ async function ensureSchema() {
       close_time TEXT NOT NULL,
       result_time TEXT NOT NULL,
       official_url TEXT NOT NULL DEFAULT '',
+      result_official_url TEXT NOT NULL DEFAULT '',
+      red_reference_url TEXT NOT NULL DEFAULT '',
+      blue_reference_url TEXT NOT NULL DEFAULT '',
       active INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
@@ -67,6 +70,9 @@ async function ensureSchema() {
     .catch(() => null);
   await db().prepare("ALTER TABLE result_records ADD COLUMN red_reference_link TEXT NOT NULL DEFAULT ''").run().catch(() => null);
   await db().prepare("ALTER TABLE result_records ADD COLUMN blue_reference_link TEXT NOT NULL DEFAULT ''").run().catch(() => null);
+  await db().prepare("ALTER TABLE result_markets ADD COLUMN result_official_url TEXT NOT NULL DEFAULT ''").run().catch(() => null);
+  await db().prepare("ALTER TABLE result_markets ADD COLUMN red_reference_url TEXT NOT NULL DEFAULT ''").run().catch(() => null);
+  await db().prepare("ALTER TABLE result_markets ADD COLUMN blue_reference_url TEXT NOT NULL DEFAULT ''").run().catch(() => null);
 }
 
 async function canManage(user: any) {
@@ -103,7 +109,9 @@ export async function GET(req: Request) {
   const markets = await db()
     .prepare(
       `SELECT id,name,shift,close_time closeTime,result_time resultTime,
-       official_url officialUrl,active FROM result_markets
+       official_url officialUrl,result_official_url resultOfficialUrl,
+       red_reference_url redReferenceUrl,blue_reference_url blueReferenceUrl,
+       active FROM result_markets
        ORDER BY CASE shift WHEN 'pagi' THEN 0 ELSE 1 END,sort_order,name`,
     )
     .all();
@@ -192,6 +200,8 @@ export async function POST(req: Request) {
     const blueReferenceLink = String(body.blueReferenceLink || "").trim();
     const adminResult = String(body.adminResult || "").trim();
     const now = Date.now();
+    await db().prepare("UPDATE result_markets SET result_official_url=?,red_reference_url=?,blue_reference_url=?,updated_at=? WHERE id=?")
+      .bind(officialLink,redReferenceLink,blueReferenceLink,now,marketId).run();
     const existing = await db().prepare("SELECT id FROM result_records WHERE market_id=? AND result_date=?").bind(marketId,resultDate).first<{id:string}>();
     if (existing) {
       await db().prepare(`UPDATE result_records SET prize_1=?,prize_2=?,prize_3=?,official_link=?,red_reference_link=?,blue_reference_link=?,admin_result=?,updated_by=?,updated_by_name=?,updated_at=?,is_cleared=0 WHERE id=?`)

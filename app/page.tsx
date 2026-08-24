@@ -25,6 +25,9 @@ type ResultMarket = {
   closeTime: string;
   resultTime: string;
   officialUrl: string;
+  resultOfficialUrl: string;
+  redReferenceUrl: string;
+  blueReferenceUrl: string;
   active: boolean;
 };
 type ResultRecord = {
@@ -1331,9 +1334,9 @@ export default function Home() {
       prize1: existing?.prize1 || "",
       prize2: existing?.prize2 || "",
       prize3: existing?.prize3 || "",
-      officialLink: existing?.officialLink || "",
-      redReferenceLink: existing?.redReferenceLink || "",
-      blueReferenceLink: existing?.blueReferenceLink || "",
+      officialLink: existing?.officialLink || market.resultOfficialUrl || "",
+      redReferenceLink: existing?.redReferenceLink || market.redReferenceUrl || "",
+      blueReferenceLink: existing?.blueReferenceLink || market.blueReferenceUrl || "",
       adminResult: existing?.adminResult || "",
     });
   };
@@ -1846,9 +1849,9 @@ export default function Home() {
                           {status.breakNote && <div className={`resultBreakNote ${status.noteType || ""}`}><span>{status.noteType === "urgent" ? "⚡" : "☕"}</span><div><b>{status.noteType === "urgent" ? "SEBENTAR LAGI RESULT" : "WAKTU SANTAI"}</b><p>{status.breakNote}</p></div></div>}
                           {record && <div className="resultPrizes"><span><small>PRIZE 1</small><b>{record.prize1 || "-"}</b></span><span><small>PRIZE 2</small><b>{record.prize2 || "-"}</b></span><span><small>PRIZE 3</small><b>{record.prize3 || "-"}</b></span></div>}
                           {record?.prize1 && <div className="resultReadyCopy"><small>TEKS HASIL SIAP KIRIM</small><pre>{resultCopyText(record)}</pre><button onClick={()=>copyResultAnnouncement(record)}>{resultCopyId===record.id?"✓ BERHASIL DISALIN":"SALIN HASIL"}</button></div>}
-                          <div className="resultCardLinks resultReferenceLinks">{record?.officialLink && <a className="official" href={record.officialLink} target="_blank" rel="noreferrer">↗ LINK RESMI</a>}{record?.redReferenceLink && <a className="red" href={record.redReferenceLink} target="_blank" rel="noreferrer">↗ ACUAN MERAH</a>}{record?.blueReferenceLink && <a className="blue" href={record.blueReferenceLink} target="_blank" rel="noreferrer">↗ ACUAN BIRU</a>}</div>
+                          <div className="resultCardLinks resultReferenceLinks">{(record?.officialLink||market.resultOfficialUrl) && <a className="official" href={record?.officialLink||market.resultOfficialUrl} target="_blank" rel="noreferrer">↗ LINK RESMI</a>}{(record?.redReferenceLink||market.redReferenceUrl) && <a className="red" href={record?.redReferenceLink||market.redReferenceUrl} target="_blank" rel="noreferrer">↗ ACUAN MERAH</a>}{(record?.blueReferenceLink||market.blueReferenceUrl) && <a className="blue" href={record?.blueReferenceLink||market.blueReferenceUrl} target="_blank" rel="noreferrer">↗ ACUAN BIRU</a>}</div>
                           {record?.adminResult && <div className="resultAdminText"><small>HASIL RESULT ADMIN</small>{/^https?:\/\//i.test(record.adminResult.trim()) ? <a href={record.adminResult.trim()} target="_blank" rel="noreferrer">↗ LIHAT HASIL RESULT ADMIN</a> : <p>{record.adminResult}</p>}</div>}
-                          <button className={status.code === "due" ? "primary dueButton" : "secondary"} onClick={() => openResultEditor(market)}>{record ? "EDIT HASIL RESULT" : status.code === "due" ? "INPUT HASIL SEKARANG" : "INPUT HASIL"}</button>
+                          <button className={status.code === "due" ? "primary dueButton" : "secondary"} onClick={() => openResultEditor(market)}>{record?.prize1||record?.prize2||record?.prize3||record?.adminResult ? "EDIT HASIL / ATUR LINK" : status.code === "due" ? "INPUT HASIL / ATUR LINK" : "ATUR LINK / INPUT HASIL"}</button>
                         </article>;
                       })}
                     </div>
