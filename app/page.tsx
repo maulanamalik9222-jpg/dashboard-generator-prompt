@@ -564,6 +564,7 @@ export default function Home() {
   const [resultClock, setResultClock] = useState(new Date());
   const [resultActiveDate, setResultActiveDate] = useState(getWibIsoDate());
   const [resultLoading, setResultLoading] = useState(false);
+  const resultLoadController = useRef<AbortController | null>(null);
   const [resultError, setResultError] = useState("");
   const [resultManageOpen, setResultManageOpen] = useState(false);
   const [resultEditMarket, setResultEditMarket] = useState<ResultMarket | null>(null);
@@ -1199,15 +1200,21 @@ export default function Home() {
   };
 
   const loadResultTracker = async () => {
+    resultLoadController.current?.abort();
+    const controller = new AbortController();
+    resultLoadController.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     setResultLoading(true);
     setResultError("");
     try {
       const todayResponse = await fetch(`/api/result-tracker?date=${resultActiveDate}&view=current&shioYear=${resultShioYear}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
-      const todayData = await todayResponse.json();
+      const todayText = await todayResponse.text();
+      const todayData = todayText ? JSON.parse(todayText) : {};
       if (!todayResponse.ok)
-        throw new Error(todayData.error || "Data result gagal dimuat.");
+        throw new Error(todayData.error || `Data result gagal dimuat (${todayResponse.status}).`);
       setResultMarkets(Array.isArray(todayData.markets) ? todayData.markets : []);
       setTodayResultRecords(
         Array.isArray(todayData.records) ? todayData.records : [],
@@ -1223,15 +1230,28 @@ export default function Home() {
           : `month=${resultFilterMonth}&year=${resultFilterYear}`;
       const archiveResponse = await fetch(`/api/result-tracker?${archiveQuery}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
-      const archiveData = await archiveResponse.json();
+      const archiveText = await archiveResponse.text();
+      const archiveData = archiveText ? JSON.parse(archiveText) : {};
       if (!archiveResponse.ok)
         throw new Error(archiveData.error || "Arsip result gagal dimuat.");
       setResultArchive(Array.isArray(archiveData.records) ? archiveData.records : []);
     } catch (error) {
-      setResultError(error instanceof Error ? error.message : "Data result gagal dimuat.");
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (resultLoadController.current === controller)
+          setResultError("Server terlalu lama merespons. Tekan REFRESH DATA untuk mencoba lagi.");
+      } else {
+        setResultError(error instanceof SyntaxError
+          ? "Server mengirim respons kosong/tidak valid. Deploy ulang file API Result Pasaran."
+          : error instanceof Error ? error.message : "Data result gagal dimuat.");
+      }
     } finally {
-      setResultLoading(false);
+      window.clearTimeout(timeout);
+      if (resultLoadController.current === controller) {
+        resultLoadController.current = null;
+        setResultLoading(false);
+      }
     }
   };
 

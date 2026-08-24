@@ -18,7 +18,7 @@ const LOCKED_SHIO_NUMBERS = [
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "cache-control": "no-store" } });
 
-async function ensureSchema() {
+async function initializeSchema() {
   await db().batch([
     db().prepare(`CREATE TABLE IF NOT EXISTS result_markets (
       id TEXT PRIMARY KEY,
@@ -75,6 +75,17 @@ async function ensureSchema() {
   await db().prepare("ALTER TABLE result_markets ADD COLUMN blue_reference_url TEXT NOT NULL DEFAULT ''").run().catch(() => null);
 }
 
+let schemaReady: Promise<void> | null = null;
+function ensureSchema() {
+  if (!schemaReady) {
+    schemaReady = initializeSchema().catch((cause) => {
+      schemaReady = null;
+      throw cause;
+    });
+  }
+  return schemaReady;
+}
+
 async function canManage(user: any) {
   if (user.role === "admin") return true;
   const row = await db()
@@ -106,16 +117,6 @@ export async function GET(req: Request) {
   const currentView = url.searchParams.get("view") === "current";
   const shioYear = Number(url.searchParams.get("shioYear") || new Date().getFullYear());
 
-  const markets = await db()
-    .prepare(
-      `SELECT id,name,shift,close_time closeTime,result_time resultTime,
-       official_url officialUrl,result_official_url resultOfficialUrl,
-       red_reference_url redReferenceUrl,blue_reference_url blueReferenceUrl,
-       active FROM result_markets
-       ORDER BY CASE shift WHEN 'pagi' THEN 0 ELSE 1 END,sort_order,name`,
-    )
-    .all();
-
   let query = `SELECT r.id,r.market_id marketId,m.name marketName,m.shift,
     r.result_date resultDate,m.close_time closeTime,m.result_time resultTime,
     r.prize_1 prize1,r.prize_2 prize2,r.prize_3 prize3,
@@ -133,12 +134,22 @@ export async function GET(req: Request) {
   } else {
     statement = db().prepare(`${query} ORDER BY r.result_date DESC,m.shift,m.sort_order,m.name LIMIT 300`);
   }
-  const records = await statement.all();
-  const shioSettings = await db().prepare("SELECT shio_name name,numbers FROM result_shio_settings WHERE year=? ORDER BY rowid").bind(shioYear).all();
+  const [markets, records, shioSettings, manageAccess] = await Promise.all([
+    db().prepare(
+      `SELECT id,name,shift,close_time closeTime,result_time resultTime,
+       official_url officialUrl,result_official_url resultOfficialUrl,
+       red_reference_url redReferenceUrl,blue_reference_url blueReferenceUrl,
+       active FROM result_markets
+       ORDER BY CASE shift WHEN 'pagi' THEN 0 ELSE 1 END,sort_order,name`,
+    ).all(),
+    statement.all(),
+    db().prepare("SELECT shio_name name,numbers FROM result_shio_settings WHERE year=? ORDER BY rowid").bind(shioYear).all(),
+    canManage(user),
+  ]);
   return json({
     markets: markets.results,
     records: records.results,
-    canManage: await canManage(user),
+    canManage: manageAccess,
     shioYear,
     shioSettings: shioSettings.results,
   });

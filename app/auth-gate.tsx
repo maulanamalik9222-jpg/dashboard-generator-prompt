@@ -16,16 +16,28 @@ type User = {
 const MENU_ACCESS_OPTIONS = [["kemenangan","Postingan Kemenangan"],["syair","Postingan Syair"],["prediksi","Postingan Prediksi"],["jadwal","Perubahan Jadwal"],["validasi","Validasi Dana"],["usdt","Update USDT"],["result","Keterlambatan Result"],["bola","Prediksi Bola"],["monitor","Cek Link Situs Otomatis"],["handover","Data Serah Terima"],["resultTracker","Result Pasaran"],["resultArchive","Arsip Hasil Result"]] as const;
 
 async function api(body?: unknown) {
-  const response = await fetch(
-    "/api/auth",
-    body
-      ? {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      : {},
-  );
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  let response: Response;
+  try {
+    response = await fetch(
+      "/api/auth",
+      body
+        ? {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          }
+        : { signal: controller.signal },
+    );
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError")
+      throw new Error("Server terlalu lama merespons. Silakan coba lagi.");
+    throw cause;
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const text = await response.text();
   let data: any = {};
   try {
@@ -41,6 +53,7 @@ async function api(body?: unknown) {
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -59,15 +72,21 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [editStaffRole, setEditStaffRole] = useState<"assistant" | "staff">("staff");
   const [canSetRole, setCanSetRole] = useState(false);
 
-  const load = () =>
-    api()
+  const load = () => {
+    setLoading(true);
+    setLoadError("");
+    return api()
       .then((data) => {
         setUser(data.user);
         const left = Math.max(0, data.expiresAt - Date.now());
         window.setTimeout(() => location.reload(), left + 500);
       })
-      .catch(() => setUser(null))
+      .catch((cause: any) => {
+        if (/Belum login|401/i.test(String(cause?.message || ""))) setUser(null);
+        else setLoadError(cause?.message || "Dashboard gagal dimuat.");
+      })
       .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -162,6 +181,17 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="authPage teamUpAuthPage">
         <div className="authCard teamUpAuthCard authLoading">Memuat dashboard...</div>
+      </div>
+    );
+
+  if (loadError)
+    return (
+      <div className="authPage teamUpAuthPage">
+        <div className="authCard teamUpAuthCard authLoading">
+          <strong>Dashboard belum berhasil dimuat</strong>
+          <span>{loadError}</span>
+          <button type="button" onClick={() => load()}>Coba Lagi</button>
+        </div>
       </div>
     );
 
