@@ -13,7 +13,7 @@ type User = {
   staffRole?: "master" | "assistant" | "staff";
   approvalStatus?: "pending" | "approved";
 };
-const MENU_ACCESS_OPTIONS = [["kemenangan","Postingan Kemenangan"],["syair","Postingan Syair"],["prediksi","Postingan Prediksi"],["jadwal","Perubahan Jadwal"],["validasi","Validasi Dana"],["usdt","Update USDT"],["result","Keterlambatan Result"],["bola","Prediksi Bola"],["monitor","Cek Link Situs Otomatis"],["handover","Data Serah Terima"],["resultTracker","Result Pasaran"],["resultArchive","Arsip Hasil Result"]] as const;
+const MENU_ACCESS_OPTIONS = [["kemenangan","Postingan Kemenangan"],["syair","Postingan Syair"],["prediksi","Postingan Prediksi"],["jadwal","Perubahan Jadwal"],["validasi","Validasi Dana"],["usdt","Update USDT"],["result","Keterlambatan Result"],["bola","Prediksi Bola"],["monitor","Cek Link Situs Otomatis"],["handover","Data Serah Terima"],["resultTracker","Result Pasaran"],["resultArchive","Arsip Hasil Result"],["bankOff","Cek Rekening Off/Cabut"]] as const;
 
 async function api(body?: unknown) {
   const controller = new AbortController();

@@ -15,7 +15,8 @@ type Kind =
   | "monitor"
   | "handover"
   | "resultTracker"
-  | "resultArchive";
+  | "resultArchive"
+  | "bankOff";
 type HandoverShift = "pagi" | "malam";
 type HandoverEntry = { id: string; content: string };
 type ResultMarket = {
@@ -49,6 +50,13 @@ type ResultRecord = {
   updatedByName?: string;
 };
 type ShioSetting = { name: string; numbers: string };
+type BankSiteAccount = {
+  id: string;
+  bankType: string;
+  accountName: string;
+  accountNumber: string;
+  createdAt?: number;
+};
 const DEFAULT_RESULT_SHIO: ShioSetting[] = [
   {name:"KUDA",numbers:"01, 13, 25, 37, 49, 61, 73, 85, 97"},
   {name:"ULAR",numbers:"02, 14, 26, 38, 50, 62, 74, 86, 98"},
@@ -208,6 +216,12 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
     label: "Arsip Result & Shio",
     icon: "⌕",
     hint: "Cari arsip dan atur shio tahunan",
+  },
+  {
+    id: "bankOff",
+    label: "Cek Rekening Off/Cabut",
+    icon: "▤",
+    hint: "Cocokkan info ADM dengan data bank",
   },
 ];
 
@@ -595,6 +609,17 @@ export default function Home() {
   const [resultCopyId,setResultCopyId]=useState("");
   const [resultShioSaving,setResultShioSaving]=useState(false);
   const [resultShioNotice,setResultShioNotice]=useState("");
+  const [bankAccounts, setBankAccounts] = useState<BankSiteAccount[]>([]);
+  const [bankPaste, setBankPaste] = useState("");
+  const [bankMatches, setBankMatches] = useState<BankSiteAccount[]>([]);
+  const [bankDraft, setBankDraft] = useState({
+    bankType: "",
+    accountName: "",
+    accountNumber: "",
+  });
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState("");
+  const [bankCopied, setBankCopied] = useState(false);
   const monitorCaptureResolvers = useRef(
     new Map<
       string,
@@ -692,6 +717,93 @@ export default function Home() {
   }, []);
 
   useEffect(()=>{if(isMaster||allowedMenus.includes(kind))return;const firstAllowed=kinds.find(item=>allowedMenus.includes(item.id));if(firstAllowed)setKind(firstAllowed.id)},[allowedMenus,isMaster,kind]);
+
+  const loadBankAccounts = async () => {
+    setBankLoading(true);
+    setBankError("");
+    try {
+      const response = await fetch("/api/bank-off", { cache: "no-store" });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!response.ok) throw new Error(data.error || "Data bank gagal dimuat.");
+      setBankAccounts(Array.isArray(data.accounts) ? data.accounts : []);
+    } catch (error) {
+      setBankError(error instanceof Error ? error.message : "Data bank gagal dimuat.");
+    } finally {
+      setBankLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (kind === "bankOff") loadBankAccounts();
+  }, [kind]);
+
+  const saveBankAccount = async () => {
+    setBankError("");
+    try {
+      const response = await fetch("/api/bank-off", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "save", ...bankDraft }),
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!response.ok) throw new Error(data.error || "Data bank gagal disimpan.");
+      setBankDraft({ bankType: "", accountName: "", accountNumber: "" });
+      await loadBankAccounts();
+    } catch (error) {
+      setBankError(error instanceof Error ? error.message : "Data bank gagal disimpan.");
+    }
+  };
+
+  const deleteBankAccount = async (id: string) => {
+    if (!window.confirm("Hapus rekening ini dari Data Bank Situs?")) return;
+    const response = await fetch("/api/bank-off", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      setBankError(data.error || "Data bank gagal dihapus.");
+      return;
+    }
+    setBankMatches((current) => current.filter((item) => item.id !== id));
+    await loadBankAccounts();
+  };
+
+  const normalizeBankNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits.replace(/^0+/, "") || "0";
+  };
+
+  const checkBankOff = () => {
+    const lines = bankPaste.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const matches = bankAccounts.filter((account) => {
+      const stored = normalizeBankNumber(account.accountNumber);
+      if (stored.length < 4) return false;
+      return lines.some((line) => {
+        const sequences = line.match(/\d[\d\s.-]{3,}\d|\d{4,}/g) || [];
+        return sequences.some((sequence) => normalizeBankNumber(sequence) === stored);
+      });
+    });
+    setBankMatches(matches);
+    setBankCopied(false);
+    if (!matches.length)
+      setBankError("Belum ada nomor yang cocok. Periksa data tempelan atau Data Bank Situs.");
+    else setBankError("");
+  };
+
+  const bankCopyText = bankMatches
+    .map((item) => `${item.bankType} ${item.accountName} ${item.accountNumber}`)
+    .join("\n");
+
+  const copyBankMatches = async () => {
+    if (!bankCopyText) return;
+    await navigator.clipboard.writeText(bankCopyText);
+    setBankCopied(true);
+  };
 
   const loadMonitor = async (shift = monitorShift) => {
     try {
@@ -1699,6 +1811,8 @@ export default function Home() {
                     ? "Cari arsip hasil result dan kelola acuan shio tahunan dengan aman."
                   : kind === "handover"
                     ? "Susun catatan serah terima shift, revisi setiap nomor, lalu salin seluruh hasil."
+                  : kind === "bankOff"
+                    ? "Tempel informasi rekening dari ADM, cocokkan otomatis, dan kelola Data Bank Situs tersimpan."
                   : "Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda."}
               </p>
             </div>
@@ -1787,6 +1901,8 @@ export default function Home() {
             className={
               kind === "monitor"
                 ? "grid monitorGrid lexendContent"
+                : kind === "bankOff"
+                  ? "grid bankOffGrid lexendContent"
                 : kind === "resultTracker" || kind === "resultArchive"
                   ? "grid resultTrackerGrid lexendContent"
                 : kind === "handover"
@@ -1800,7 +1916,68 @@ export default function Home() {
                       : "grid lexendContent"
             }
           >
-            {kind === "resultTracker" ? (
+            {kind === "bankOff" ? (
+              <section className="bankOffStudio">
+                <section className="panel bankOffHero">
+                  <div>
+                    <span className="bankOffKicker">BANK CONTROL CENTER</span>
+                    <h1>Cek Rekening Off/Cabut</h1>
+                    <p>Data Bank Situs tersimpan aman. Pencocokan tetap akurat walau nomor dari ADM memakai atau menghilangkan angka nol di depan.</p>
+                  </div>
+                  <div className="bankOffStats">
+                    <span><small>DATA BANK</small><b>{bankAccounts.length}</b></span>
+                    <span><small>TERKENA OFF/CABUT</small><b>{bankMatches.length}</b></span>
+                  </div>
+                </section>
+                {bankError && <div className="bankOffError">{bankError}</div>}
+                <section className="bankOffColumns">
+                  <section className="panel bankOffPastePanel">
+                    <div className="panelHead"><div><span>01</span><h2>Tempel Info dari ADM</h2></div></div>
+                    <div className="bankOffBody">
+                      <p>Tempel seluruh baris rekening yang di-off-kan atau dicabut. Satu baris boleh berisi bank, nama, dan nomor rekening.</p>
+                      <textarea value={bankPaste} onChange={(event) => setBankPaste(event.target.value)} placeholder={"Contoh:\nBCA SUTISNA 5860586144\nMANDIRI HENDRI PRATAMA PUTRA 1110024385664"} />
+                      <button className="bankOffCheck" onClick={checkBankOff}>⌕ CEK & COCOKKAN REKENING</button>
+                      <button className="bankOffClear" onClick={() => { setBankPaste(""); setBankMatches([]); setBankError(""); }}>BERSIHKAN TEMPELAN</button>
+                    </div>
+                  </section>
+
+                  <section className="panel bankOffResultPanel">
+                    <div className="panelHead"><div><span>02</span><h2>Bank yang Terkena Off/Cabut</h2></div><b>{bankMatches.length} COCOK</b></div>
+                    <div className="bankOffBody">
+                      {bankMatches.length ? (
+                        <>
+                          <div className="bankOffResultList">
+                            {bankMatches.map((item) => <article key={item.id}>
+                              <span>{item.bankType}</span>
+                              <b>{item.accountName}</b>
+                              <strong>{item.accountNumber}</strong>
+                            </article>)}
+                          </div>
+                          <div className="bankOffCopyPreview"><small>COPY KIRIM KE LINE</small><pre>{bankCopyText}</pre></div>
+                          <button className="bankOffCopy" onClick={copyBankMatches}>{bankCopied ? "✓ HASIL TERSALIN" : "SALIN HASIL UNTUK LINE"}</button>
+                        </>
+                      ) : <div className="bankOffEmpty">Belum ada hasil. Tempel info ADM lalu tekan tombol cek.</div>}
+                    </div>
+                  </section>
+
+                  <section className="panel bankOffDataPanel">
+                    <div className="panelHead"><div><span>03</span><h2>Data Bank Situs</h2></div><b>{bankLoading ? "MEMUAT..." : `${bankAccounts.length} DATA`}</b></div>
+                    <div className="bankOffBody">
+                      <div className="bankOffForm">
+                        <input value={bankDraft.bankType} onChange={(event) => setBankDraft((current) => ({ ...current, bankType: event.target.value }))} placeholder="Jenis bank (BCA/BRI/MANDIRI)" />
+                        <input value={bankDraft.accountName} onChange={(event) => setBankDraft((current) => ({ ...current, accountName: event.target.value }))} placeholder="Nama rekening" />
+                        <input inputMode="numeric" value={bankDraft.accountNumber} onChange={(event) => setBankDraft((current) => ({ ...current, accountNumber: event.target.value }))} placeholder="Nomor rekening (nol depan tetap disimpan)" />
+                        <button onClick={saveBankAccount}>+ TAMBAH DATA BANK</button>
+                      </div>
+                      <div className="bankOffTable">
+                        <table><thead><tr><th>JENIS BANK</th><th>NAMA REKENING</th><th>NOMOR REKENING</th><th>AKSI</th></tr></thead>
+                        <tbody>{bankAccounts.map((item) => <tr key={item.id}><td>{item.bankType}</td><td>{item.accountName}</td><td>{item.accountNumber}</td><td><button onClick={() => deleteBankAccount(item.id)}>HAPUS</button></td></tr>)}</tbody></table>
+                      </div>
+                    </div>
+                  </section>
+                </section>
+              </section>
+            ) : kind === "resultTracker" ? (
               <section className="resultTrackerStudio">
                 <section className="panel resultTrackerHero">
                   <div>
@@ -3265,6 +3442,7 @@ export default function Home() {
             kind !== "handover" &&
             kind !== "resultTracker" &&
             kind !== "resultArchive" &&
+            kind !== "bankOff" &&
             history.length > 0 && (
               <section className="history">
                 <div className="historyTitle">
@@ -3365,6 +3543,7 @@ export default function Home() {
           .footballControls{border-color:rgba(103,169,180,.22)!important;background:#0c1b20!important}.footballSource a{color:#d5bd69!important}.footballThemePicker button{border-color:#43545a!important;color:#b7c7ca!important;background:#18262b!important;box-shadow:none!important}.footballThemePicker button.selected{border-color:#7c8f94!important;color:#eef5f5!important;background:#32434a!important}.footballThemePicker button.selected.blue{border-color:#67aeb9!important;color:#eaf7f8!important;background:#356d78!important;box-shadow:0 5px 16px rgba(55,125,137,.14)!important}.footballActions button{border-color:#4d6066!important;color:#d5e0e2!important;background:#223138!important;box-shadow:none!important}.footballActions .copyWp{border-color:#b49a4f!important;color:#171408!important;background:#d4bd6c!important}.footballStats b{border-color:rgba(102,169,180,.25)!important;color:#d8c273!important;background:#102128!important}.footballBoard.footballWpPreview{border-color:#4d9099!important;box-shadow:0 20px 48px rgba(0,0,0,.24)!important}.footballBoard.footballWpPreview.blue{color:#dbe9eb!important;background:linear-gradient(180deg,#10272e,#0b1d23)!important}.footballWpPreview.blue .footballNotice{border-color:#527e86!important;color:#c9d9dc!important;background:#172d34!important}.footballWpPreview.blue .footballLeague{border-color:rgba(97,161,171,.26)!important;background:#0e2127!important}.footballWpPreview.blue .footballLeague h2{color:#d7c575!important;border-color:rgba(104,170,180,.25)!important}.footballWpPreview.blue .footballMatchCard{border-color:rgba(98,158,168,.24)!important;color:#dce9ea!important;background:#13262c!important}.footballWpPreview.blue .footballPrediction{border-color:#5fa5af!important;color:#e9f4f5!important;background:#254b54!important;box-shadow:none!important}.footballWpPreview.blue .footballPrediction strong{color:#f1dc80!important}.footballWpPreview.blue h1{color:#e3d17c!important;-webkit-text-fill-color:#e3d17c!important;background:none!important;animation:none!important;text-shadow:none!important}
           .shell.lightMode{--ink:#263e43;--panel:#f8faf9;--line:rgba(75,132,142,.2);--muted:#61777c;color:#263e43!important;background:radial-gradient(circle at 82% 0,rgba(94,160,169,.09),transparent 38%),radial-gradient(circle at 55% 82%,rgba(181,155,74,.06),transparent 34%),#e9efee!important}.shell.lightMode::before{opacity:.045!important;filter:blur(90px) saturate(.45)!important}.shell.lightMode::after{opacity:.12!important}.shell.lightMode .sidebar{border-color:rgba(81,135,144,.19)!important;background:linear-gradient(180deg,#f4f7f6,#e7edec)!important;box-shadow:12px 0 32px rgba(39,75,82,.08)!important}.shell.lightMode .panel,.shell.lightMode .autoSsToolbar,.shell.lightMode .autoSsCard,.shell.lightMode .validationResult,.shell.lightMode .resultInfoOutput{border-color:rgba(75,132,142,.2)!important;color:#263e43!important;background:linear-gradient(145deg,#fafcfb,#f0f4f3)!important;box-shadow:0 14px 34px rgba(47,82,88,.08)!important}.shell.lightMode .upBrand{background:linear-gradient(145deg,#f4f7f6,#e4ebea)!important;box-shadow:0 14px 32px rgba(40,78,85,.09)!important}.shell.lightMode .navItem:hover,.shell.lightMode .navItem.active{color:#243e43!important;background:linear-gradient(90deg,rgba(82,154,165,.12),rgba(182,156,77,.06))!important}.shell.lightMode .ghost{color:#304b50!important;background:#e4eceb!important}.shell.lightMode .modeToggle{color:#edf5f5!important;background:#344d53!important}.shell.lightMode .field input,.shell.lightMode .field textarea,.shell.lightMode select,.shell.lightMode .autoSsSearch input,.shell.lightMode .autoSsDate input{border-color:rgba(76,132,142,.22)!important;color:#29454a!important;background:#f8faf9!important}.shell.lightMode .referenceGuide,.shell.lightMode .syairGuide,.shell.lightMode .usdtIntro,.shell.lightMode .resultInfoIntro,.shell.lightMode .validationIntro,.shell.lightMode .quality,.shell.lightMode .usdtClock{border-color:rgba(78,135,144,.18)!important;background:#edf3f2!important}.shell.lightMode .footballControls{background:#f3f6f5!important}.shell.lightMode .footballThemePicker button{color:#536a6f!important;background:#e5ebea!important}.shell.lightMode .footballThemePicker button.selected.blue{color:#f5fbfb!important;background:#527f87!important}.shell.lightMode .footballActions button{color:#40585d!important;background:#e2e8e7!important}.shell.lightMode .footballActions .copyWp{color:#332d18!important;background:#d8c57c!important}.shell.lightMode .footballBoard.footballWpPreview.blue{border-color:#80aeb5!important;color:#29464b!important;background:linear-gradient(180deg,#e8f0ef,#dfe9e8)!important;box-shadow:0 16px 36px rgba(42,78,84,.1)!important}.shell.lightMode .footballWpPreview.blue .footballNotice{border-color:#9ab8bc!important;color:#496267!important;background:#f1f5f4!important}.shell.lightMode .footballWpPreview.blue .footballLeague{border-color:#adc3c6!important;background:#edf2f1!important}.shell.lightMode .footballWpPreview.blue .footballLeague h2{color:#6d6135!important}.shell.lightMode .footballWpPreview.blue .footballMatchCard{border-color:#afc5c8!important;color:#29464b!important;background:#f8faf9!important}.shell.lightMode .footballWpPreview.blue .footballPrediction{border-color:#7eaab0!important;color:#f4f9f9!important;background:#527d85!important}.shell.lightMode .footballWpPreview.blue .footballPrediction strong{color:#fff0ad!important}.shell.lightMode .footballWpPreview.blue h1{color:#5b704d!important;-webkit-text-fill-color:#5b704d!important}
           .shell.darkMode{color-scheme:dark}
+          .bankOffGrid{display:block!important;max-width:1540px}.bankOffStudio{display:grid;gap:18px}.bankOffHero{display:flex;align-items:center;gap:24px;padding:25px 28px}.bankOffHero>div:first-child{margin-right:auto}.bankOffKicker{color:#67d9e5;font-size:9px;font-weight:950;letter-spacing:.16em}.bankOffHero h1{margin:7px 0 5px;font-size:32px}.bankOffHero p{max-width:820px;margin:0;color:#9eb4b9;font-size:11px;line-height:1.6}.bankOffStats{display:flex;gap:10px}.bankOffStats span{display:grid;min-width:130px;padding:13px;border:1px solid rgba(91,185,197,.24);border-radius:10px;background:#09191e}.bankOffStats small{color:#7d9ba1;font-size:7px;font-weight:900}.bankOffStats b{margin-top:5px;color:#d8c46d;font-size:23px}.bankOffError{padding:13px 16px;border:1px solid #8b3946;border-radius:10px;color:#ffb0bb;background:#35131a;font-size:10px;font-weight:800}.bankOffColumns{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(330px,1fr) minmax(470px,1.35fr);gap:14px;align-items:start}.bankOffColumns>.panel{overflow:hidden}.bankOffColumns .panelHead h2{font-size:18px}.bankOffColumns .panelHead>b{color:#d7c16a;font-size:8px}.bankOffBody{display:grid;gap:13px;padding:20px}.bankOffBody>p{margin:0;color:#9ab0b5;font-size:10px;line-height:1.6}.bankOffBody textarea{width:100%;min-height:390px;padding:15px;border:1px solid rgba(255,91,106,.42);border-radius:11px;resize:vertical;color:#f3f8f8;background:linear-gradient(145deg,#211015,#110a0d);font:750 11px/1.65 "Lexend",Arial,sans-serif}.bankOffCheck,.bankOffCopy,.bankOffForm button{min-height:48px;border:1px solid #d4bd65;border-radius:9px;color:#171407;background:linear-gradient(135deg,#e4d48d,#c7ae4e);font:900 10px "Lexend",Arial,sans-serif}.bankOffClear{min-height:39px;border:1px solid #41565c;border-radius:8px;color:#a9bdc1;background:#122127;font:850 8px "Lexend",Arial,sans-serif}.bankOffResultPanel{border-color:rgba(224,194,74,.42)!important}.bankOffResultList{display:grid;gap:8px;max-height:330px;overflow:auto}.bankOffResultList article{display:grid;grid-template-columns:75px 1fr;gap:5px 10px;padding:12px;border:1px solid rgba(226,194,73,.32);border-radius:9px;background:#211c09}.bankOffResultList span{color:#e7cc63;font-size:8px;font-weight:950}.bankOffResultList b{color:#fff;font-size:11px}.bankOffResultList strong{grid-column:1/-1;color:#8be7ed;font-size:13px;letter-spacing:.04em}.bankOffCopyPreview{display:grid;gap:8px;padding:13px;border:1px solid rgba(225,195,73,.25);border-radius:9px;background:#10130d}.bankOffCopyPreview small{color:#d7bd58;font-size:7px;font-weight:950}.bankOffCopyPreview pre{max-height:210px;margin:0;overflow:auto;white-space:pre-wrap;color:#eaf4f4;font:750 10px/1.65 "Lexend",Arial,sans-serif}.bankOffEmpty{padding:80px 20px;border:1px dashed rgba(224,194,74,.28);border-radius:10px;color:#8fa3a8;text-align:center;font-size:10px;line-height:1.6}.bankOffDataPanel{border-color:rgba(70,158,220,.36)!important}.bankOffForm{display:grid;grid-template-columns:.65fr 1fr 1fr auto;gap:8px}.bankOffForm input{min-width:0;min-height:44px;padding:0 11px;border:1px solid rgba(74,168,220,.3);border-radius:8px;color:#eaf6f7;background:#07151c;font:750 9px "Lexend",Arial,sans-serif}.bankOffForm button{min-height:44px;padding:0 15px}.bankOffTable{max-height:520px;overflow:auto;border:1px solid rgba(78,158,195,.22);border-radius:9px}.bankOffTable table{width:100%;min-width:590px;border-collapse:collapse}.bankOffTable th,.bankOffTable td{padding:11px 10px;border-bottom:1px solid rgba(91,160,180,.15);text-align:left;font-size:9px}.bankOffTable th{position:sticky;top:0;z-index:2;color:#8fdde5;background:#0b2028;font-size:7px;letter-spacing:.06em}.bankOffTable td{color:#d5e3e5}.bankOffTable td:nth-child(3){color:#e3ca6d;font-weight:850}.bankOffTable button{padding:6px 9px;border:1px solid #7c3440;border-radius:6px;color:#ff9eaa;background:#32131a;font-size:7px;font-weight:900}.shell.lightMode .bankOffStats span,.shell.lightMode .bankOffForm input,.shell.lightMode .bankOffTable,.shell.lightMode .bankOffCopyPreview{color:#29464b;background:#fff}.shell.lightMode .bankOffBody textarea{color:#572832;background:#fff4f5}.shell.lightMode .bankOffResultList article{background:#fff9dc}.shell.lightMode .bankOffResultList b,.shell.lightMode .bankOffCopyPreview pre{color:#29464b}.shell.lightMode .bankOffTable td{color:#29464b}.shell.lightMode .bankOffTable th{color:#2d606a;background:#e5f1f2}
           @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
           @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
           @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}.resultTrackerHero{padding:18px}.resultLiveClock{width:100%}.resultMarketCards,.resultMarketForm,.resultPrizeInputs{grid-template-columns:1fr}.resultMarketList>div{grid-template-columns:1fr 1fr}.resultMarketList small{grid-column:1/-1}}
