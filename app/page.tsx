@@ -620,6 +620,7 @@ export default function Home() {
   const [bankLoading, setBankLoading] = useState(false);
   const [bankError, setBankError] = useState("");
   const [bankCopied, setBankCopied] = useState(false);
+  const [bankChecked, setBankChecked] = useState(false);
   const monitorCaptureResolvers = useRef(
     new Map<
       string,
@@ -789,15 +790,17 @@ export default function Home() {
       });
     });
     setBankMatches(matches);
+    setBankChecked(true);
     setBankCopied(false);
-    if (!matches.length)
-      setBankError("Belum ada nomor yang cocok. Periksa data tempelan atau Data Bank Situs.");
-    else setBankError("");
+    setBankError("");
   };
 
-  const bankCopyText = bankMatches
-    .map((item) => `${item.bankType} ${item.accountName} ${item.accountNumber}`)
-    .join("\n");
+  const bankNoMatchText = "TIDAK ADA DATA BANK SITUS YANG DICABUT / DIOFFKAN YA KO/CI.";
+  const bankCopyText = bankMatches.length
+    ? bankMatches.map((item) => `${item.bankType} ${item.accountName} ${item.accountNumber}`).join("\n")
+    : bankChecked
+      ? bankNoMatchText
+      : "";
 
   const copyBankMatches = async () => {
     if (!bankCopyText) return;
@@ -1937,7 +1940,7 @@ export default function Home() {
                       <p>Tempel seluruh baris rekening yang di-off-kan atau dicabut. Satu baris boleh berisi bank, nama, dan nomor rekening.</p>
                       <textarea value={bankPaste} onChange={(event) => setBankPaste(event.target.value)} placeholder={"Contoh:\nBCA SUTISNA 5860586144\nMANDIRI HENDRI PRATAMA PUTRA 1110024385664"} />
                       <button className="bankOffCheck" onClick={checkBankOff}>⌕ CEK & COCOKKAN REKENING</button>
-                      <button className="bankOffClear" onClick={() => { setBankPaste(""); setBankMatches([]); setBankError(""); }}>BERSIHKAN TEMPELAN</button>
+                      <button className="bankOffClear" onClick={() => { setBankPaste(""); setBankMatches([]); setBankChecked(false); setBankError(""); }}>BERSIHKAN TEMPELAN</button>
                     </div>
                   </section>
 
@@ -1955,6 +1958,12 @@ export default function Home() {
                           </div>
                           <div className="bankOffCopyPreview"><small>COPY KIRIM KE LINE</small><pre>{bankCopyText}</pre></div>
                           <button className="bankOffCopy" onClick={copyBankMatches}>{bankCopied ? "✓ HASIL TERSALIN" : "SALIN HASIL UNTUK LINE"}</button>
+                        </>
+                      ) : bankChecked ? (
+                        <>
+                          <div className="bankOffNoMatch">✓ {bankNoMatchText}</div>
+                          <div className="bankOffCopyPreview"><small>COPY KIRIM KE LINE</small><pre>{bankNoMatchText}</pre></div>
+                          <button className="bankOffCopy" onClick={copyBankMatches}>{bankCopied ? "✓ KETERANGAN TERSALIN" : "SALIN KETERANGAN UNTUK LINE"}</button>
                         </>
                       ) : <div className="bankOffEmpty">Belum ada hasil. Tempel info ADM lalu tekan tombol cek.</div>}
                     </div>
@@ -3544,6 +3553,8 @@ export default function Home() {
           .shell.lightMode{--ink:#263e43;--panel:#f8faf9;--line:rgba(75,132,142,.2);--muted:#61777c;color:#263e43!important;background:radial-gradient(circle at 82% 0,rgba(94,160,169,.09),transparent 38%),radial-gradient(circle at 55% 82%,rgba(181,155,74,.06),transparent 34%),#e9efee!important}.shell.lightMode::before{opacity:.045!important;filter:blur(90px) saturate(.45)!important}.shell.lightMode::after{opacity:.12!important}.shell.lightMode .sidebar{border-color:rgba(81,135,144,.19)!important;background:linear-gradient(180deg,#f4f7f6,#e7edec)!important;box-shadow:12px 0 32px rgba(39,75,82,.08)!important}.shell.lightMode .panel,.shell.lightMode .autoSsToolbar,.shell.lightMode .autoSsCard,.shell.lightMode .validationResult,.shell.lightMode .resultInfoOutput{border-color:rgba(75,132,142,.2)!important;color:#263e43!important;background:linear-gradient(145deg,#fafcfb,#f0f4f3)!important;box-shadow:0 14px 34px rgba(47,82,88,.08)!important}.shell.lightMode .upBrand{background:linear-gradient(145deg,#f4f7f6,#e4ebea)!important;box-shadow:0 14px 32px rgba(40,78,85,.09)!important}.shell.lightMode .navItem:hover,.shell.lightMode .navItem.active{color:#243e43!important;background:linear-gradient(90deg,rgba(82,154,165,.12),rgba(182,156,77,.06))!important}.shell.lightMode .ghost{color:#304b50!important;background:#e4eceb!important}.shell.lightMode .modeToggle{color:#edf5f5!important;background:#344d53!important}.shell.lightMode .field input,.shell.lightMode .field textarea,.shell.lightMode select,.shell.lightMode .autoSsSearch input,.shell.lightMode .autoSsDate input{border-color:rgba(76,132,142,.22)!important;color:#29454a!important;background:#f8faf9!important}.shell.lightMode .referenceGuide,.shell.lightMode .syairGuide,.shell.lightMode .usdtIntro,.shell.lightMode .resultInfoIntro,.shell.lightMode .validationIntro,.shell.lightMode .quality,.shell.lightMode .usdtClock{border-color:rgba(78,135,144,.18)!important;background:#edf3f2!important}.shell.lightMode .footballControls{background:#f3f6f5!important}.shell.lightMode .footballThemePicker button{color:#536a6f!important;background:#e5ebea!important}.shell.lightMode .footballThemePicker button.selected.blue{color:#f5fbfb!important;background:#527f87!important}.shell.lightMode .footballActions button{color:#40585d!important;background:#e2e8e7!important}.shell.lightMode .footballActions .copyWp{color:#332d18!important;background:#d8c57c!important}.shell.lightMode .footballBoard.footballWpPreview.blue{border-color:#80aeb5!important;color:#29464b!important;background:linear-gradient(180deg,#e8f0ef,#dfe9e8)!important;box-shadow:0 16px 36px rgba(42,78,84,.1)!important}.shell.lightMode .footballWpPreview.blue .footballNotice{border-color:#9ab8bc!important;color:#496267!important;background:#f1f5f4!important}.shell.lightMode .footballWpPreview.blue .footballLeague{border-color:#adc3c6!important;background:#edf2f1!important}.shell.lightMode .footballWpPreview.blue .footballLeague h2{color:#6d6135!important}.shell.lightMode .footballWpPreview.blue .footballMatchCard{border-color:#afc5c8!important;color:#29464b!important;background:#f8faf9!important}.shell.lightMode .footballWpPreview.blue .footballPrediction{border-color:#7eaab0!important;color:#f4f9f9!important;background:#527d85!important}.shell.lightMode .footballWpPreview.blue .footballPrediction strong{color:#fff0ad!important}.shell.lightMode .footballWpPreview.blue h1{color:#5b704d!important;-webkit-text-fill-color:#5b704d!important}
           .shell.darkMode{color-scheme:dark}
           .bankOffGrid{display:block!important;max-width:1540px}.bankOffStudio{display:grid;gap:18px}.bankOffHero{display:flex;align-items:center;gap:24px;padding:25px 28px}.bankOffHero>div:first-child{margin-right:auto}.bankOffKicker{color:#67d9e5;font-size:9px;font-weight:950;letter-spacing:.16em}.bankOffHero h1{margin:7px 0 5px;font-size:32px}.bankOffHero p{max-width:820px;margin:0;color:#9eb4b9;font-size:11px;line-height:1.6}.bankOffStats{display:flex;gap:10px}.bankOffStats span{display:grid;min-width:130px;padding:13px;border:1px solid rgba(91,185,197,.24);border-radius:10px;background:#09191e}.bankOffStats small{color:#7d9ba1;font-size:7px;font-weight:900}.bankOffStats b{margin-top:5px;color:#d8c46d;font-size:23px}.bankOffError{padding:13px 16px;border:1px solid #8b3946;border-radius:10px;color:#ffb0bb;background:#35131a;font-size:10px;font-weight:800}.bankOffColumns{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(330px,1fr) minmax(470px,1.35fr);gap:14px;align-items:start}.bankOffColumns>.panel{overflow:hidden}.bankOffColumns .panelHead h2{font-size:18px}.bankOffColumns .panelHead>b{color:#d7c16a;font-size:8px}.bankOffBody{display:grid;gap:13px;padding:20px}.bankOffBody>p{margin:0;color:#9ab0b5;font-size:10px;line-height:1.6}.bankOffBody textarea{width:100%;min-height:390px;padding:15px;border:1px solid rgba(255,91,106,.42);border-radius:11px;resize:vertical;color:#f3f8f8;background:linear-gradient(145deg,#211015,#110a0d);font:750 11px/1.65 "Lexend",Arial,sans-serif}.bankOffCheck,.bankOffCopy,.bankOffForm button{min-height:48px;border:1px solid #d4bd65;border-radius:9px;color:#171407;background:linear-gradient(135deg,#e4d48d,#c7ae4e);font:900 10px "Lexend",Arial,sans-serif}.bankOffClear{min-height:39px;border:1px solid #41565c;border-radius:8px;color:#a9bdc1;background:#122127;font:850 8px "Lexend",Arial,sans-serif}.bankOffResultPanel{border-color:rgba(224,194,74,.42)!important}.bankOffResultList{display:grid;gap:8px;max-height:330px;overflow:auto}.bankOffResultList article{display:grid;grid-template-columns:75px 1fr;gap:5px 10px;padding:12px;border:1px solid rgba(226,194,73,.32);border-radius:9px;background:#211c09}.bankOffResultList span{color:#e7cc63;font-size:8px;font-weight:950}.bankOffResultList b{color:#fff;font-size:11px}.bankOffResultList strong{grid-column:1/-1;color:#8be7ed;font-size:13px;letter-spacing:.04em}.bankOffCopyPreview{display:grid;gap:8px;padding:13px;border:1px solid rgba(225,195,73,.25);border-radius:9px;background:#10130d}.bankOffCopyPreview small{color:#d7bd58;font-size:7px;font-weight:950}.bankOffCopyPreview pre{max-height:210px;margin:0;overflow:auto;white-space:pre-wrap;color:#eaf4f4;font:750 10px/1.65 "Lexend",Arial,sans-serif}.bankOffEmpty{padding:80px 20px;border:1px dashed rgba(224,194,74,.28);border-radius:10px;color:#8fa3a8;text-align:center;font-size:10px;line-height:1.6}.bankOffDataPanel{border-color:rgba(70,158,220,.36)!important}.bankOffForm{display:grid;grid-template-columns:.65fr 1fr 1fr auto;gap:8px}.bankOffForm input{min-width:0;min-height:44px;padding:0 11px;border:1px solid rgba(74,168,220,.3);border-radius:8px;color:#eaf6f7;background:#07151c;font:750 9px "Lexend",Arial,sans-serif}.bankOffForm button{min-height:44px;padding:0 15px}.bankOffTable{max-height:520px;overflow:auto;border:1px solid rgba(78,158,195,.22);border-radius:9px}.bankOffTable table{width:100%;min-width:590px;border-collapse:collapse}.bankOffTable th,.bankOffTable td{padding:11px 10px;border-bottom:1px solid rgba(91,160,180,.15);text-align:left;font-size:9px}.bankOffTable th{position:sticky;top:0;z-index:2;color:#8fdde5;background:#0b2028;font-size:7px;letter-spacing:.06em}.bankOffTable td{color:#d5e3e5}.bankOffTable td:nth-child(3){color:#e3ca6d;font-weight:850}.bankOffTable button{padding:6px 9px;border:1px solid #7c3440;border-radius:6px;color:#ff9eaa;background:#32131a;font-size:7px;font-weight:900}.shell.lightMode .bankOffStats span,.shell.lightMode .bankOffForm input,.shell.lightMode .bankOffTable,.shell.lightMode .bankOffCopyPreview{color:#29464b;background:#fff}.shell.lightMode .bankOffBody textarea{color:#572832;background:#fff4f5}.shell.lightMode .bankOffResultList article{background:#fff9dc}.shell.lightMode .bankOffResultList b,.shell.lightMode .bankOffCopyPreview pre{color:#29464b}.shell.lightMode .bankOffTable td{color:#29464b}.shell.lightMode .bankOffTable th{color:#2d606a;background:#e5f1f2}
+          .bankOffNoMatch{padding:18px;border:1px solid rgba(72,226,169,.45);border-radius:10px;color:#69e8b8;background:#09251d;font-size:12px;font-weight:900;line-height:1.6;text-align:center}
+          .shell.lightMode .bankOffNoMatch{color:#116e50;background:#e7fff5}
           @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
           @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
           @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}.resultTrackerHero{padding:18px}.resultLiveClock{width:100%}.resultMarketCards,.resultMarketForm,.resultPrizeInputs{grid-template-columns:1fr}.resultMarketList>div{grid-template-columns:1fr 1fr}.resultMarketList small{grid-column:1/-1}}
