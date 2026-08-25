@@ -79,6 +79,36 @@ export async function POST(req: Request) {
     return json({ ok: true, id });
   }
 
+  if (action === "bulkSave") {
+    const source = Array.isArray(body.accounts) ? body.accounts.slice(0, 1500) : [];
+    const unique = new Map<string, { bankType: string; accountName: string; accountNumber: string }>();
+    for (const item of source) {
+      const bankType = cleanText(item?.bankType, 40).toUpperCase();
+      const accountName = cleanText(item?.accountName).toUpperCase();
+      const accountNumber = cleanNumber(item?.accountNumber);
+      if (bankType && accountName && accountNumber.length >= 4)
+        unique.set(accountNumber, { bankType, accountName, accountNumber });
+    }
+    const accounts = Array.from(unique.values());
+    if (!accounts.length)
+      return json({ error: "Tidak ada data rekening valid yang dapat disimpan." }, 400);
+
+    const now = Date.now();
+    const statements = accounts.map((item) =>
+      db().prepare(`INSERT INTO bank_site_accounts
+        (id,bank_type,account_name,account_number,created_by,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?)
+        ON CONFLICT(account_number) DO UPDATE SET
+          bank_type=excluded.bank_type,
+          account_name=excluded.account_name,
+          updated_at=excluded.updated_at`)
+        .bind(crypto.randomUUID(), item.bankType, item.accountName, item.accountNumber, user.id, now, now),
+    );
+    for (let index = 0; index < statements.length; index += 75)
+      await db().batch(statements.slice(index, index + 75));
+    return json({ ok: true, saved: accounts.length });
+  }
+
   if (action === "delete") {
     const id = cleanText(body.id, 80);
     if (!id) return json({ error: "Data rekening tidak ditemukan." }, 400);

@@ -612,11 +612,9 @@ export default function Home() {
   const [bankAccounts, setBankAccounts] = useState<BankSiteAccount[]>([]);
   const [bankPaste, setBankPaste] = useState("");
   const [bankMatches, setBankMatches] = useState<BankSiteAccount[]>([]);
-  const [bankDraft, setBankDraft] = useState({
-    bankType: "",
-    accountName: "",
-    accountNumber: "",
-  });
+  const [bankBulkText, setBankBulkText] = useState("");
+  const [bankBulkSaving, setBankBulkSaving] = useState(false);
+  const [bankBulkNotice, setBankBulkNotice] = useState("");
   const [bankLoading, setBankLoading] = useState(false);
   const [bankError, setBankError] = useState("");
   const [bankCopied, setBankCopied] = useState(false);
@@ -739,21 +737,58 @@ export default function Home() {
     if (kind === "bankOff") loadBankAccounts();
   }, [kind]);
 
-  const saveBankAccount = async () => {
+  const parseBulkBankAccounts = (raw: string) => {
+    const headerWords = /^(JENIS\s*BANK|BANK\s*TYPE|NAMA\s*REKENING|NOMOR\s*REKENING|NO\.?\s*REK)/i;
+    const parsed = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !headerWords.test(line))
+      .map((line) => {
+        let columns = line.split(/\t|\||;/).map((part) => part.trim()).filter(Boolean);
+        if (columns.length < 3) {
+          const numberMatch = line.match(/\d[\d\s.-]{2,}\d|\d{4,}/g)?.at(-1);
+          if (!numberMatch) return null;
+          const accountNumber = numberMatch.replace(/\D/g, "");
+          const beforeNumber = line.slice(0, line.lastIndexOf(numberMatch)).replace(/[,|-]+$/g, "").trim();
+          const words = beforeNumber.split(/\s+/).filter(Boolean);
+          if (words.length < 2) return null;
+          return { bankType: words.shift() || "", accountName: words.join(" "), accountNumber };
+        }
+        const bankType = columns.shift() || "";
+        const accountNumber = (columns.pop() || "").replace(/\D/g, "");
+        return { bankType, accountName: columns.join(" "), accountNumber };
+      })
+      .filter((item): item is { bankType: string; accountName: string; accountNumber: string } =>
+        Boolean(item?.bankType && item.accountName && item.accountNumber.length >= 4),
+      );
+    return Array.from(new Map(parsed.map((item) => [item.accountNumber, item])).values());
+  };
+
+  const saveBankAccountsBulk = async () => {
     setBankError("");
+    setBankBulkNotice("");
+    const accounts = parseBulkBankAccounts(bankBulkText);
+    if (!accounts.length) {
+      setBankError("Data tidak terbaca. Gunakan satu baris per rekening: JENIS BANK [TAB] NAMA REKENING [TAB] NOMOR REKENING.");
+      return;
+    }
+    setBankBulkSaving(true);
     try {
       const response = await fetch("/api/bank-off", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "save", ...bankDraft }),
+        body: JSON.stringify({ action: "bulkSave", accounts }),
       });
       const text = await response.text();
       const data = text ? JSON.parse(text) : {};
       if (!response.ok) throw new Error(data.error || "Data bank gagal disimpan.");
-      setBankDraft({ bankType: "", accountName: "", accountNumber: "" });
+      setBankBulkText("");
+      setBankBulkNotice(`${data.saved || accounts.length} DATA BANK BERHASIL DITAMBAHKAN / DIPERBARUI.`);
       await loadBankAccounts();
     } catch (error) {
       setBankError(error instanceof Error ? error.message : "Data bank gagal disimpan.");
+    } finally {
+      setBankBulkSaving(false);
     }
   };
 
@@ -1976,11 +2011,11 @@ export default function Home() {
                   <section className="panel bankOffDataPanel">
                     <div className="panelHead"><div><span>03</span><h2>Data Bank Situs</h2></div><b>{bankLoading ? "MEMUAT..." : `${bankAccounts.length} DATA`}</b></div>
                     <div className="bankOffBody">
-                      <div className="bankOffForm">
-                        <input value={bankDraft.bankType} onChange={(event) => setBankDraft((current) => ({ ...current, bankType: event.target.value }))} placeholder="Jenis bank (BCA/BRI/MANDIRI)" />
-                        <input value={bankDraft.accountName} onChange={(event) => setBankDraft((current) => ({ ...current, accountName: event.target.value }))} placeholder="Nama rekening" />
-                        <input inputMode="numeric" value={bankDraft.accountNumber} onChange={(event) => setBankDraft((current) => ({ ...current, accountNumber: event.target.value }))} placeholder="Nomor rekening (nol depan tetap disimpan)" />
-                        <button onClick={saveBankAccount}>+ TAMBAH DATA BANK</button>
+                      <div className="bankOffBulkAdd">
+                        <p>Tempel semua data sekaligus—satu rekening per baris. Bisa langsung disalin dari Excel/Google Sheet dengan urutan: <b>JENIS BANK · NAMA REKENING · NOMOR REKENING</b>.</p>
+                        <textarea value={bankBulkText} onChange={(event) => setBankBulkText(event.target.value)} placeholder={"Contoh:\nBCA\tSUTISNA\t05860586144\nMANDIRI\tHENDRI PRATAMA PUTRA\t1110024385664\nBRI\tSAMUEL YEHUDA\t208001019122500"} />
+                        {bankBulkNotice && <div className="bankOffBulkNotice">✓ {bankBulkNotice}</div>}
+                        <button disabled={bankBulkSaving || !bankBulkText.trim()} onClick={saveBankAccountsBulk}>{bankBulkSaving ? "MENYIMPAN DATA..." : "+ TAMBAHKAN SEMUA DATA BANK"}</button>
                       </div>
                       <div className="bankOffTable">
                         <table><thead><tr><th>JENIS BANK</th><th>NAMA REKENING</th><th>NOMOR REKENING</th><th>AKSI</th></tr></thead>
