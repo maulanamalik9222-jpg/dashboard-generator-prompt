@@ -865,9 +865,7 @@ export default function Home() {
     setBankCopied(true);
   };
 
-  const followupTokenSimilar = (left: string, right: string) => {
-    if (left === right || left.includes(right) || right.includes(left)) return true;
-    if (left.length < 5 || right.length < 5 || Math.abs(left.length - right.length) > 1) return false;
+  const followupEditDistance = (left: string, right: string) => {
     const costs = Array.from({ length: right.length + 1 }, (_, index) => index);
     for (let i = 1; i <= left.length; i += 1) {
       let previous = costs[0];
@@ -878,8 +876,14 @@ export default function Home() {
         previous = saved;
       }
     }
+    return costs[right.length];
+  };
+
+  const followupTokenSimilar = (left: string, right: string) => {
+    if (left === right || left.includes(right) || right.includes(left)) return true;
+    if (left.length < 5 || right.length < 5 || Math.abs(left.length - right.length) > 1) return false;
     const allowedErrors = Math.max(left.length, right.length) >= 7 ? 2 : 1;
-    return costs[right.length] <= allowedErrors;
+    return followupEditDistance(left, right) <= allowedErrors;
   };
 
   const parseFollowupBankText = (raw: string): FollowupBankEntry[] => {
@@ -1048,7 +1052,7 @@ export default function Home() {
     return columns;
   };
 
-  const parseFollowupCell = (words: any[], width: number, height: number, rawText: string, balanceOverride = ""): FollowupBankEntry | null => {
+  const parseFollowupCell = (words: any[], width: number, height: number, rawText: string, balanceOverride = "", nameOverride = ""): FollowupBankEntry | null => {
     const clean = (value: string) => String(value || "").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
     const centerY = (word: any) => (Number(word?.bbox?.y0 || 0) + Number(word?.bbox?.y1 || 0)) / 2;
     const sorted = (min: number, max: number) => words.filter((word) => centerY(word) >= height * min && centerY(word) < height * max).sort((a, b) => Number(a?.bbox?.y0 || 0) - Number(b?.bbox?.y0 || 0) || Number(a?.bbox?.x0 || 0) - Number(b?.bbox?.x0 || 0));
@@ -1057,7 +1061,7 @@ export default function Home() {
     if (description === "DICABUT") return null;
     const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
     const bank = (row(0.18, 0.48).match(bankPattern)?.[1] || rawText.match(bankPattern)?.[1] || "BANK").toUpperCase();
-    const accountName = row(0.34, 0.79)
+    const accountName = (nameOverride || row(0.34, 0.79))
       .replace(/^\s*\d+\s*/, "")
       .replace(/\bKAS\s+BESAR\b/ig, " ")
       .replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, " ")
@@ -1070,7 +1074,7 @@ export default function Home() {
     const balance = /^0+$/.test(balanceDigits) ? "0" : balanceDigits;
     const normalize = (value: string) => value.toUpperCase().replace(/\b(?:MYBCA|MY BCA|M-BCA|REKENING|BANK)\b/g, " ").replace(/[^A-Z0-9]/g, "");
     const detectedTokens = accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2 && !/^(MYBCA|BCA|BANK)$/.test(token));
-    const stored = bankAccounts.find((account) => {
+    const directStored = bankAccounts.find((account) => {
       const storedName = normalize(account.accountName);
       const name = normalize(accountName);
       const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
@@ -1081,6 +1085,16 @@ export default function Home() {
       const storedCoverage = storedTokens.length > 0 && storedMatches / storedTokens.length >= 0.8;
       return sameBank && name.length >= 3 && (storedName === name || storedName.includes(name) || name.includes(storedName) || detectedCoverage || storedCoverage);
     });
+    const stored = directStored || bankAccounts
+      .filter((account) => bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase()))
+      .map((account) => {
+        const storedName = normalize(account.accountName);
+        const detectedName = normalize(accountName);
+        const similarity = storedName && detectedName ? 1 - followupEditDistance(storedName, detectedName) / Math.max(storedName.length, detectedName.length) : 0;
+        return { account, similarity };
+      })
+      .filter((candidate) => candidate.similarity >= 0.55)
+      .sort((left, right) => right.similarity - left.similarity)[0]?.account;
     return { id: crypto.randomUUID(), bank: stored?.bankType || bank, accountName: stored?.accountName || accountName, accountNumber: stored?.accountNumber || "", balance, description };
   };
 
@@ -1142,6 +1156,34 @@ export default function Home() {
             const result = await worker.recognize(cell);
             const rawText = String(result?.data?.text || "");
             texts.push(rawText);
+            const nameY = Math.round(source.height * 0.34);
+            const nameBottom = Math.round(source.height * 0.79);
+            const nameSmall = document.createElement("canvas");
+            nameSmall.width = Math.max(1, column.width - 6);
+            nameSmall.height = Math.max(1, nameBottom - nameY);
+            const nameSmallContext = nameSmall.getContext("2d", { willReadFrequently: true });
+            let nameRaw = "";
+            if (nameSmallContext) {
+              nameSmallContext.drawImage(source, column.x + 3, nameY, nameSmall.width, nameSmall.height, 0, 0, nameSmall.width, nameSmall.height);
+              const nameImage = nameSmallContext.getImageData(0, 0, nameSmall.width, nameSmall.height);
+              for (let pixel = 0; pixel < nameImage.data.length; pixel += 4) {
+                const color = nameImage.data[pixel] > 75 ? 255 : 0;
+                nameImage.data[pixel] = color; nameImage.data[pixel + 1] = color; nameImage.data[pixel + 2] = color; nameImage.data[pixel + 3] = 255;
+              }
+              nameSmallContext.putImageData(nameImage, 0, 0);
+              const nameCanvas = document.createElement("canvas");
+              nameCanvas.width = nameSmall.width * 9;
+              nameCanvas.height = nameSmall.height * 9;
+              const nameContext = nameCanvas.getContext("2d");
+              if (nameContext) {
+                nameContext.imageSmoothingEnabled = false;
+                nameContext.drawImage(nameSmall, 0, 0, nameCanvas.width, nameCanvas.height);
+                await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /.-" });
+                const nameResult = await worker.recognize(nameCanvas);
+                nameRaw = String(nameResult?.data?.text || "");
+                await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "" });
+              }
+            }
             const balanceY = Math.round(source.height * 0.77);
             const balanceSmall = document.createElement("canvas");
             balanceSmall.width = Math.max(1, column.width - 6);
@@ -1170,7 +1212,7 @@ export default function Home() {
                 await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "" });
               }
             }
-            const entry = parseFollowupCell(result?.data?.words || [], cell.width, cell.height, rawText, balanceRaw);
+            const entry = parseFollowupCell(result?.data?.words || [], cell.width, cell.height, rawText, balanceRaw, nameRaw);
             if (entry) detected.push(entry);
           }
         }
@@ -2319,7 +2361,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V6 CLEAN NAME</span><h1>Followup Bank Bermasalah</h1><p>Label KAS BESAR, nama bank, nomor urut, dan tanda pemisah dibuang. Hanya nama pemilik rekening yang dicocokkan dengan Data Bank Situs.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V7 RED CELL OCR</span><h1>Followup Bank Bermasalah</h1><p>Seluruh kotak BERMASALAH dan OFF dibaca satu per satu. Area nama pada latar merah diproses khusus agar tidak terlewat.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
