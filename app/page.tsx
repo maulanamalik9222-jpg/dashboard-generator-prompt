@@ -865,6 +865,22 @@ export default function Home() {
     setBankCopied(true);
   };
 
+  const followupTokenSimilar = (left: string, right: string) => {
+    if (left === right || left.includes(right) || right.includes(left)) return true;
+    if (left.length < 5 || right.length < 5 || Math.abs(left.length - right.length) > 1) return false;
+    const costs = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= left.length; i += 1) {
+      let previous = costs[0];
+      costs[0] = i;
+      for (let j = 1; j <= right.length; j += 1) {
+        const saved = costs[j];
+        costs[j] = Math.min(costs[j] + 1, costs[j - 1] + 1, previous + (left[i - 1] === right[j - 1] ? 0 : 1));
+        previous = saved;
+      }
+    }
+    return costs[right.length] <= 1;
+  };
+
   const parseFollowupBankText = (raw: string): FollowupBankEntry[] => {
     const lines = raw.split(/\r?\n/).map((line) => line.replace(/[|]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
     const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB(?: NIAGA)?|DANAMON|PERMATA|PANIN|MAYBANK|OCBC(?: NISP)?|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|BANK JATIM|BANK JATENG|BANK SUMUT|BANK RIAU|BANK ACEH|DANA|OVO|GOPAY|SHOPEEPAY)\b/i;
@@ -955,9 +971,11 @@ export default function Home() {
         const sameBank = bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase());
         const detectedTokens = accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2 && !/^(MYBCA|BCA|BANK)$/.test(token));
         const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
-        const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => storedToken === token || storedToken.includes(token) || token.includes(storedToken))).length;
+        const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => followupTokenSimilar(storedToken, token))).length;
+        const storedMatches = storedTokens.filter((storedToken) => detectedTokens.some((token) => followupTokenSimilar(storedToken, token))).length;
         const fuzzyName = detectedTokens.length > 0 && tokenMatches / detectedTokens.length >= 0.6;
-        return sameBank && nameKey.length >= 4 && (storedName === nameKey || storedName.includes(nameKey) || nameKey.includes(storedName) || fuzzyName);
+        const storedNameFound = storedTokens.length > 0 && storedMatches / storedTokens.length >= 0.8;
+        return sameBank && nameKey.length >= 4 && (storedName === nameKey || storedName.includes(nameKey) || nameKey.includes(storedName) || fuzzyName || storedNameFound);
       });
       return {
         id: crypto.randomUUID(),
@@ -1047,9 +1065,12 @@ export default function Home() {
       const storedName = normalize(account.accountName);
       const name = normalize(accountName);
       const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
-      const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => storedToken === token || storedToken.includes(token) || token.includes(storedToken))).length;
+      const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => followupTokenSimilar(storedToken, token))).length;
+      const storedMatches = storedTokens.filter((storedToken) => detectedTokens.some((token) => followupTokenSimilar(storedToken, token))).length;
       const sameBank = bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase());
-      return sameBank && name.length >= 3 && (storedName === name || storedName.includes(name) || name.includes(storedName) || (detectedTokens.length > 0 && tokenMatches / detectedTokens.length >= 0.6));
+      const detectedCoverage = detectedTokens.length > 0 && tokenMatches / detectedTokens.length >= 0.6;
+      const storedCoverage = storedTokens.length > 0 && storedMatches / storedTokens.length >= 0.8;
+      return sameBank && name.length >= 3 && (storedName === name || storedName.includes(name) || name.includes(storedName) || detectedCoverage || storedCoverage);
     });
     return { id: crypto.randomUUID(), bank: stored?.bankType || bank, accountName: stored?.accountName || accountName, accountNumber: stored?.accountNumber || "", balance, description };
   };
@@ -2289,7 +2310,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V4 PER KOLOM</span><h1>Followup Bank Bermasalah</h1><p>Hanya status BERMASALAH, OFF, atau DIOFFKAN yang masuk follow-up. Rekening DICABUT otomatis dilewati.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V5 NAME MATCH</span><h1>Followup Bank Bermasalah</h1><p>Hanya status BERMASALAH, OFF, atau DIOFFKAN yang masuk follow-up. Nama dicocokkan dengan Data Bank Situs untuk mengambil nomor rekening yang tepat.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
