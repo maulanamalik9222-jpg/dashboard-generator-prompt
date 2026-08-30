@@ -892,7 +892,7 @@ export default function Home() {
         ? "DICABUT"
         : /BERMASALAH|MASALAH/.test(statusCompact)
           ? "BERMASALAH"
-          : /(^|[^A-Z])(OFF|0FF|ORR)([^A-Z]|$)/.test(joined.toUpperCase())
+          : /D[I1]OFFKAN|DIOFFKAN/.test(statusCompact) || /(^|[^A-Z])(OFF|0FF|ORR)([^A-Z]|$)/.test(joined.toUpperCase())
             ? "OFF"
             : "";
       const bank = joined.match(bankPattern)?.[1]?.toUpperCase() || "BANK";
@@ -905,7 +905,7 @@ export default function Home() {
       const balance = balanceMatch?.[1]?.replace(/[^\d]/g, "") || "";
       return { id: crypto.randomUUID(), bank, accountName, accountNumber: number, balance, description: issueStatus };
     });
-    return entries.filter((item) => /^(OFF|BERMASALAH|DICABUT)$/.test(item.description));
+    return entries.filter((item) => /^(OFF|BERMASALAH)$/.test(item.description));
   };
 
   const parseFollowupTableWords = (words: any[], imageWidth: number, imageHeight: number): FollowupBankEntry[] => {
@@ -943,7 +943,7 @@ export default function Home() {
         ? "DICABUT"
         : /BERMASALAH|MASALAH/.test(statusCompact)
           ? "BERMASALAH"
-          : /^(OFF|0FF|ORR)$/.test(statusCompact)
+          : /D[I1]OFFKAN|DIOFFKAN/.test(statusCompact) || /^(OFF|0FF|ORR)$/.test(statusCompact)
             ? "OFF"
             : "";
       const bankArea = `${rowText(0.18, 0.43)} ${rowText(0.23, 0.55)}`;
@@ -968,13 +968,14 @@ export default function Home() {
         description: issueStatus,
       };
     });
-    return result.filter((item) => /^(OFF|BERMASALAH|DICABUT)$/.test(item.description));
+    return result.filter((item) => /^(OFF|BERMASALAH)$/.test(item.description));
   };
 
   const followupIssueStatus = (value: string) => {
     const compact = String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (/D[I1]CABUT|CABUT/.test(compact)) return "DICABUT";
     if (/BERMASALAH|MASALAH/.test(compact)) return "BERMASALAH";
+    if (/D[I1]OFFKAN|DIOFFKAN/.test(compact)) return "OFF";
     if (/(^|[^A-Z])(OFF|0FF|ORR)([^A-Z]|$)/.test(String(value || "").toUpperCase()) || /^(OFF|0FF|ORR)$/.test(compact)) return "OFF";
     return "";
   };
@@ -1033,6 +1034,7 @@ export default function Home() {
     const sorted = (min: number, max: number) => words.filter((word) => centerY(word) >= height * min && centerY(word) < height * max).sort((a, b) => Number(a?.bbox?.y0 || 0) - Number(b?.bbox?.y0 || 0) || Number(a?.bbox?.x0 || 0) - Number(b?.bbox?.x0 || 0));
     const row = (min: number, max: number) => sorted(min, max).map((word) => clean(word.text)).filter(Boolean).join(" ");
     const description = followupIssueStatus(`${row(0, 0.25)} ${rawText}`) || "OFF";
+    if (description === "DICABUT") return null;
     const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
     const bank = (row(0.18, 0.48).match(bankPattern)?.[1] || rawText.match(bankPattern)?.[1] || "BANK").toUpperCase();
     const accountName = row(0.34, 0.79).replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, "").replace(bankPattern, "").replace(/^[\s/.,-]+|[\s/.,-]+$/g, "").trim();
@@ -1149,7 +1151,7 @@ export default function Home() {
       setFollowupOcrText(combined);
       const finalEntries = detected;
       setFollowupEntries(finalEntries);
-      if (!finalEntries.length) setFollowupError("Tidak ditemukan status OFF, BERMASALAH, atau DICABUT pada screenshot.");
+      if (!finalEntries.length) setFollowupError("Tidak ditemukan status BERMASALAH, OFF, atau DIOFFKAN pada screenshot.");
       setFollowupProgress("SELESAI DIBACA");
     } catch (error) {
       setFollowupError(error instanceof Error ? error.message : "Screenshot gagal dibaca.");
@@ -2287,7 +2289,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V3 PER KOLOM</span><h1>Followup Bank Bermasalah</h1><p>Upload screenshot dari ADM. Sistem mengambil bank, nama rekening, nomor rekening, saldo, dan keterangan secara otomatis.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V4 PER KOLOM</span><h1>Followup Bank Bermasalah</h1><p>Hanya status BERMASALAH, OFF, atau DIOFFKAN yang masuk follow-up. Rekening DICABUT otomatis dilewati.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
