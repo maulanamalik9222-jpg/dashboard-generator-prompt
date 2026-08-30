@@ -65,6 +65,7 @@ type FollowupBankEntry = {
   accountNumber: string;
   balance: string;
   description: string;
+  sourceImageId?: string;
 };
 const DEFAULT_RESULT_SHIO: ShioSetting[] = [
   {name:"KUDA",numbers:"01, 13, 25, 37, 49, 61, 73, 85, 97"},
@@ -634,7 +635,7 @@ export default function Home() {
   const [bankError, setBankError] = useState("");
   const [bankCopied, setBankCopied] = useState(false);
   const [bankChecked, setBankChecked] = useState(false);
-  const [followupFiles, setFollowupFiles] = useState<{ name: string; url: string }[]>([]);
+  const [followupFiles, setFollowupFiles] = useState<{ id: string; name: string; url: string }[]>([]);
   const [followupEntries, setFollowupEntries] = useState<FollowupBankEntry[]>([]);
   const [followupOcrText, setFollowupOcrText] = useState("");
   const [followupReading, setFollowupReading] = useState(false);
@@ -1116,7 +1117,8 @@ export default function Home() {
     const selected = Array.from(files).filter((file) => file.type.startsWith("image/")).slice(0, 10);
     if (!selected.length) return setFollowupError("Pilih file gambar screenshot JPG, PNG, atau WEBP.");
     followupFiles.forEach((item) => URL.revokeObjectURL(item.url));
-    setFollowupFiles(selected.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })));
+    const preparedFiles = selected.map((file) => ({ id: crypto.randomUUID(), name: file.name, url: URL.createObjectURL(file) }));
+    setFollowupFiles(preparedFiles);
     setFollowupReading(true);
     setFollowupError("");
     setFollowupCopied(false);
@@ -1213,7 +1215,7 @@ export default function Home() {
               }
             }
             const entry = parseFollowupCell(result?.data?.words || [], cell.width, cell.height, rawText, balanceRaw, nameRaw);
-            if (entry) detected.push(entry);
+            if (entry) detected.push({ ...entry, sourceImageId: preparedFiles[i].id });
           }
         }
       } finally {
@@ -1234,6 +1236,22 @@ export default function Home() {
 
   const updateFollowupEntry = (id: string, field: keyof Omit<FollowupBankEntry, "id">, value: string) => {
     setFollowupEntries((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item));
+    setFollowupCopied(false);
+  };
+  const deleteFollowupImage = (id: string) => {
+    const target = followupFiles.find((file) => file.id === id);
+    if (target) URL.revokeObjectURL(target.url);
+    setFollowupFiles((current) => current.filter((file) => file.id !== id));
+    setFollowupEntries((current) => current.filter((entry) => entry.sourceImageId !== id));
+    setFollowupCopied(false);
+  };
+  const clearFollowupImages = () => {
+    followupFiles.forEach((file) => URL.revokeObjectURL(file.url));
+    setFollowupFiles([]);
+    setFollowupEntries([]);
+    setFollowupOcrText("");
+    setFollowupError("");
+    setFollowupProgress("");
     setFollowupCopied(false);
   };
   const followupReportText = `Info : TOGELUP\nPerihal : Follow-up Rekening ( BANK ) Bermasalah\n\n${followupEntries.map((item) => `Nama Rekening : ${item.accountName}\nNomor Rekening : ${item.accountNumber} (${item.bank})\nSaldo : Rp. ${item.balance ? Number(item.balance).toLocaleString("id-ID") : ""}\nKeterangan : ${item.description}`).join("\n\n")}`;
@@ -2361,7 +2379,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V7 RED CELL OCR</span><h1>Followup Bank Bermasalah</h1><p>Seluruh kotak BERMASALAH dan OFF dibaca satu per satu. Area nama pada latar merah diproses khusus agar tidak terlewat.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V8 IMAGE CONTROL</span><h1>Followup Bank Bermasalah</h1><p>Seluruh kotak BERMASALAH dan OFF dibaca satu per satu. Gambar dan hasilnya dapat dihapus per item atau sekaligus.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
@@ -2373,7 +2391,7 @@ export default function Home() {
                         <input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={followupReading} onChange={(event) => readFollowupScreenshots(event.target.files)} />
                         <i>▧</i><strong>{followupReading ? followupProgress : "KLIK / PILIH SCREENSHOT"}</strong><small>PNG, JPG, atau WEBP · bisa upload banyak sekaligus</small>
                       </label>
-                      {!!followupFiles.length && <div className="followupThumbs">{followupFiles.map((file) => <figure key={file.url}><img src={file.url} alt={file.name} /><figcaption>{file.name}</figcaption></figure>)}</div>}
+                      {!!followupFiles.length && <><div className="followupThumbs">{followupFiles.map((file) => <figure key={file.id}><button type="button" onClick={() => deleteFollowupImage(file.id)} title="Hapus gambar dan hasilnya">×</button><img src={file.url} alt={file.name} /><figcaption>{file.name}</figcaption></figure>)}</div><button type="button" className="followupClearAll" onClick={clearFollowupImages}>HAPUS SEMUA GAMBAR & HASIL</button></>}
                       {followupOcrText && <details className="followupRaw"><summary>LIHAT / PERBAIKI TEKS HASIL BACA</summary><textarea value={followupOcrText} onChange={(event) => setFollowupOcrText(event.target.value)} /><button onClick={() => setFollowupEntries(parseFollowupBankText(followupOcrText))}>BACA ULANG TEKS</button></details>}
                     </div>
                   </section>
@@ -2391,8 +2409,8 @@ export default function Home() {
                     </div>
                   </section>
                   <section className="panel followupOutputPanel">
-                    <div className="panelHead"><div><span>03</span><h2>Report LINE</h2></div><b>SIAP KIRIM</b></div>
-                    <div className="followupBody"><pre className="followupReport">{followupEntries.length ? followupReportText : "Hasil report akan tampil setelah screenshot selesai dibaca."}</pre><button className="bankOffCopy" disabled={!followupEntries.length} onClick={copyFollowupReport}>{followupCopied ? "✓ REPORT TERSALIN" : "SALIN REPORT UNTUK LINE"}</button></div>
+                    <div className="panelHead"><div><span>03</span><h2>Report LINE</h2></div><b>{followupEntries.length} TOTAL REKENING</b></div>
+                    <div className="followupBody"><div className="followupTotal"><small>TOTAL HASIL FOLLOW-UP</small><strong>{followupEntries.length}</strong><span>REKENING BERMASALAH / OFF</span></div><pre className="followupReport">{followupEntries.length ? followupReportText : "Hasil report akan tampil setelah screenshot selesai dibaca."}</pre><button className="bankOffCopy" disabled={!followupEntries.length} onClick={copyFollowupReport}>{followupCopied ? "✓ REPORT TERSALIN" : "SALIN REPORT UNTUK LINE"}</button></div>
                   </section>
                 </section>
               </section>
@@ -4039,6 +4057,7 @@ export default function Home() {
           .bankOffMaintenanceNote{display:flex;align-items:center;gap:10px;padding:13px 18px;border:1px solid rgba(238,203,77,.4);border-left:4px solid #ffe24f;border-radius:9px;color:#dce9e9;background:linear-gradient(90deg,rgba(255,224,58,.12),rgba(0,211,255,.045));font-size:10px;font-weight:800;line-height:1.55;box-shadow:0 8px 25px rgba(0,0,0,.16)}
           .bankOffMaintenanceNote strong{flex:0 0 auto;color:#ffe65e;font-size:11px;font-weight:950;letter-spacing:.04em}.shell.lightMode .bankOffMaintenanceNote{color:#344f54;background:linear-gradient(90deg,#fff8d8,#eef8f7)}
           .followupBankGrid{display:block!important;max-width:1540px}.followupBankStudio{display:grid;gap:18px}.followupBankHero{display:flex;align-items:center;gap:20px;padding:25px 28px;border-color:rgba(255,180,70,.32)!important}.followupBankHero>div{margin-right:auto}.followupBankHero span{color:#ffbd61;font-size:9px;font-weight:950;letter-spacing:.16em}.followupBankHero h1{margin:7px 0 5px;font-size:31px}.followupBankHero p{max-width:820px;margin:0;color:#9eb4b9;font-size:11px;line-height:1.6}.followupBankHero>b{padding:13px 16px;border:1px solid rgba(255,180,70,.32);border-radius:9px;color:#ffd18b;background:#261a0b;font-size:9px}.followupBankColumns{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(420px,1.25fr) minmax(350px,1fr);gap:14px;align-items:start}.followupBankColumns>.panel{overflow:hidden}.followupBody{display:grid;gap:13px;padding:20px}.followupDropzone{display:grid;place-items:center;min-height:230px;padding:24px;border:2px dashed rgba(255,183,81,.48);border-radius:13px;cursor:pointer;text-align:center;background:linear-gradient(145deg,rgba(255,174,55,.08),rgba(45,178,195,.05))}.followupDropzone.reading{cursor:wait;animation:urgentNotePulse 1.4s infinite}.followupDropzone input{display:none}.followupDropzone i{font-style:normal;color:#ffc46d;font-size:45px}.followupDropzone strong{margin-top:10px;color:#f7e0b7;font-size:11px}.followupDropzone small{margin-top:7px;color:#879da3;font-size:8px}.followupThumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.followupThumbs figure{min-width:0;margin:0;padding:6px;border:1px solid rgba(98,167,177,.22);border-radius:8px;background:#09171c}.followupThumbs img{width:100%;height:90px;object-fit:cover;border-radius:5px}.followupThumbs figcaption{margin-top:5px;overflow:hidden;color:#91a7ad;font-size:7px;text-overflow:ellipsis;white-space:nowrap}.followupRaw summary{cursor:pointer;color:#8fdce5;font-size:8px;font-weight:900}.followupRaw textarea{width:100%;min-height:170px;margin-top:9px;padding:11px;border:1px solid #34525a;border-radius:8px;color:#dce8e9;background:#071318;font:700 9px/1.55 "Lexend",sans-serif}.followupRaw button,.followupEditPanel .panelHead button{padding:8px 10px;border:1px solid #48747c;border-radius:7px;color:#bdebf0;background:#153038;font-size:7px;font-weight:900}.followupEntryList{max-height:720px;overflow:auto}.followupEntry{display:grid;grid-template-columns:.55fr 1.45fr;gap:10px;padding:13px;border:1px solid rgba(255,187,86,.25);border-radius:10px;background:#0b191e}.followupEntry header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.followupEntry header b{color:#ffca77;font-size:9px}.followupEntry header button{border:0;color:#ff8d9d;background:transparent;font-size:7px;font-weight:900}.followupEntry label{display:grid;gap:5px;color:#849da3;font-size:7px;font-weight:900}.followupEntry label.wide{grid-column:1/-1}.followupEntry input,.followupEntry textarea{min-width:0;padding:10px;border:1px solid rgba(91,164,176,.25);border-radius:7px;color:#ecf4f4;background:#071318;font:750 9px "Lexend",sans-serif}.followupEntry textarea{min-height:65px;resize:vertical}.followupMissing{color:#ff8b9b!important;font-size:6px!important;line-height:1.35}.followupReport{min-height:520px;margin:0;padding:17px;border:1px solid rgba(255,190,87,.3);border-radius:10px;overflow:auto;white-space:pre-wrap;color:#f0e7d5;background:#0b130f;font:750 10px/1.75 "Lexend",sans-serif}.followupOutputPanel{position:sticky;top:10px}.shell.lightMode .followupBankHero>b{color:#7a4b08;background:#fff3da}.shell.lightMode .followupDropzone,.shell.lightMode .followupEntry,.shell.lightMode .followupRaw textarea,.shell.lightMode .followupEntry input,.shell.lightMode .followupEntry textarea,.shell.lightMode .followupReport{color:#29464b;background:#fff}.shell.lightMode .followupDropzone strong{color:#76501b}@media(max-width:1250px){.followupBankColumns{grid-template-columns:1fr 1fr}.followupOutputPanel{position:static;grid-column:1/-1}.followupReport{min-height:360px}}@media(max-width:760px){.followupBankColumns{grid-template-columns:1fr}.followupOutputPanel{grid-column:auto}.followupEntry{grid-template-columns:1fr}.followupEntry label.wide,.followupEntry header{grid-column:auto}}
+          .followupThumbs figure{position:relative}.followupThumbs figure>button{position:absolute;top:2px;right:2px;z-index:3;display:grid;place-items:center;width:21px;height:21px;padding:0;border:1px solid #ff7c8d;border-radius:50%;color:#fff;background:#9e2033;font-size:13px;font-weight:950;box-shadow:0 4px 12px rgba(0,0,0,.35)}.followupClearAll{min-height:38px;border:1px solid #803443;border-radius:8px;color:#ffacb8;background:#32131a;font:900 8px "Lexend",sans-serif}.followupTotal{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 12px;padding:13px 15px;border:1px solid rgba(255,194,84,.36);border-radius:10px;background:linear-gradient(135deg,#251a08,#0b2022)}.followupTotal small{color:#a7bbbf;font-size:7px;font-weight:900}.followupTotal strong{grid-row:1/3;grid-column:2;color:#ffe173;font-size:28px}.followupTotal span{color:#f2cb72;font-size:8px;font-weight:900}.shell.lightMode .followupTotal{background:linear-gradient(135deg,#fff4d4,#eaf5f4)}.shell.lightMode .followupClearAll{color:#9c2435;background:#fff0f2}
           @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
           @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
           @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}.resultTrackerHero{padding:18px}.resultLiveClock{width:100%}.resultMarketCards,.resultMarketForm,.resultPrizeInputs{grid-template-columns:1fr}.resultMarketList>div{grid-template-columns:1fr 1fr}.resultMarketList small{grid-column:1/-1}}
