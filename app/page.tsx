@@ -878,7 +878,8 @@ export default function Home() {
         previous = saved;
       }
     }
-    return costs[right.length] <= 1;
+    const allowedErrors = Math.max(left.length, right.length) >= 7 ? 2 : 1;
+    return costs[right.length] <= allowedErrors;
   };
 
   const parseFollowupBankText = (raw: string): FollowupBankEntry[] => {
@@ -916,6 +917,7 @@ export default function Home() {
       if (!accountName || /nomor|no\.?\s*rek|saldo|balance/i.test(accountName)) {
         accountName = block.find((line) => /^[A-Z][A-Z .'-]{3,}$/.test(line) && !bankPattern.test(line) && !/SALDO|KETERANGAN|STATUS|REKENING|FOLLOW/i.test(line)) || "";
       }
+      accountName = accountName.replace(/^\s*\d+\s*/, "").replace(/\bKAS\s+BESAR\b/ig, " ").replace(bankPattern, " ").replace(/^[\s/.,:-]+|[\s/.,:-]+$/g, "").replace(/\s+/g, " ").trim();
       const balanceLine = block.find((line) => /saldo|balance|rp\.?\s*[\d.,]+/i.test(line)) || "";
       const balanceMatch = balanceLine.match(/(?:Rp\.?\s*)?([\d][\d.,]*)/i);
       const balance = balanceMatch?.[1]?.replace(/[^\d]/g, "") || "";
@@ -1055,7 +1057,14 @@ export default function Home() {
     if (description === "DICABUT") return null;
     const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
     const bank = (row(0.18, 0.48).match(bankPattern)?.[1] || rawText.match(bankPattern)?.[1] || "BANK").toUpperCase();
-    const accountName = row(0.34, 0.79).replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, "").replace(bankPattern, "").replace(/^[\s/.,-]+|[\s/.,-]+$/g, "").trim();
+    const accountName = row(0.34, 0.79)
+      .replace(/^\s*\d+\s*/, "")
+      .replace(/\bKAS\s+BESAR\b/ig, " ")
+      .replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, " ")
+      .replace(bankPattern, " ")
+      .replace(/^[\s/.,:-]+|[\s/.,:-]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const balanceText = (balanceOverride || row(0.76, 1)).replace(/[Oo]/g, "0");
     const balanceDigits = (balanceText.match(/[\d][\d.,\s]*/)?.[0] || "").replace(/\D/g, "");
     const balance = /^0+$/.test(balanceDigits) ? "0" : balanceDigits;
@@ -2310,7 +2319,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V5 NAME MATCH</span><h1>Followup Bank Bermasalah</h1><p>Hanya status BERMASALAH, OFF, atau DIOFFKAN yang masuk follow-up. Nama dicocokkan dengan Data Bank Situs untuk mengambil nomor rekening yang tepat.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V6 CLEAN NAME</span><h1>Followup Bank Bermasalah</h1><p>Label KAS BESAR, nama bank, nomor urut, dan tanda pemisah dibuang. Hanya nama pemilik rekening yang dicocokkan dengan Data Bank Situs.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
