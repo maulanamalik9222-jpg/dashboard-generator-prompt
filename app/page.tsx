@@ -1062,7 +1062,7 @@ export default function Home() {
     if (description === "DICABUT") return null;
     const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
     const bank = (row(0.18, 0.48).match(bankPattern)?.[1] || rawText.match(bankPattern)?.[1] || "BANK").toUpperCase();
-    const accountName = (nameOverride || row(0.34, 0.79))
+    let accountName = (nameOverride || row(0.34, 0.79))
       .replace(/^\s*\d+\s*/, "")
       .replace(/\bKAS\s+BESAR\b/ig, " ")
       .replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, " ")
@@ -1070,6 +1070,14 @@ export default function Home() {
       .replace(/^[\s/.,:-]+|[\s/.,:-]+$/g, "")
       .replace(/\s+/g, " ")
       .trim();
+    if (accountName.includes("/")) accountName = accountName.split("/").at(-1)?.trim() || accountName;
+    const nameParts = accountName.split(/\s+/).filter(Boolean);
+    const firstNamePart = (nameParts[0] || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+    const cleanBank = bank.replace(/[^A-Z0-9]/g, "");
+    if (firstNamePart && (followupTokenSimilar(firstNamePart, cleanBank) || (cleanBank === "MANDIRI" && /^MAN[DL]?IR/i.test(firstNamePart)))) {
+      nameParts.shift();
+      accountName = nameParts.join(" ").replace(/^[f|/.,:-]+/i, "").trim();
+    }
     const balanceText = (balanceOverride || row(0.76, 1)).replace(/[Oo]/g, "0");
     const balanceDigits = (balanceText.match(/[\d][\d.,\s]*/)?.[0] || "").replace(/\D/g, "");
     const balance = /^0+$/.test(balanceDigits) ? "0" : balanceDigits;
@@ -1169,7 +1177,7 @@ export default function Home() {
               nameSmallContext.drawImage(source, column.x + 3, nameY, nameSmall.width, nameSmall.height, 0, 0, nameSmall.width, nameSmall.height);
               const nameImage = nameSmallContext.getImageData(0, 0, nameSmall.width, nameSmall.height);
               for (let pixel = 0; pixel < nameImage.data.length; pixel += 4) {
-                const color = nameImage.data[pixel] > 75 ? 255 : 0;
+                const color = nameImage.data[pixel] > 50 ? 255 : 0;
                 nameImage.data[pixel] = color; nameImage.data[pixel + 1] = color; nameImage.data[pixel + 2] = color; nameImage.data[pixel + 3] = 255;
               }
               nameSmallContext.putImageData(nameImage, 0, 0);
@@ -2379,7 +2387,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V8 IMAGE CONTROL</span><h1>Followup Bank Bermasalah</h1><p>Seluruh kotak BERMASALAH dan OFF dibaca satu per satu. Gambar dan hasilnya dapat dihapus per item atau sekaligus.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V9 NAME CONTRAST</span><h1>Followup Bank Bermasalah</h1><p>Kontras nama pada kotak merah ditingkatkan. Label bank sebelum tanda pemisah dibuang sebelum pencocokan Data Bank Situs.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
