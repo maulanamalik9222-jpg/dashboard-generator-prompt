@@ -756,7 +756,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (kind === "bankOff") loadBankAccounts();
+    if (kind === "bankOff" || kind === "followupBank") loadBankAccounts();
   }, [kind]);
 
   const parseBulkBankAccounts = (raw: string) => {
@@ -887,6 +887,14 @@ export default function Home() {
     const entries = uniqueNumbers.map(({ index, number }) => {
       const block = lines.slice(Math.max(0, index - 6), Math.min(lines.length, index + 8));
       const joined = block.join("\n");
+      const statusCompact = joined.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const issueStatus = /D[I1]CABUT|CABUT/.test(statusCompact)
+        ? "DICABUT"
+        : /BERMASALAH|MASALAH/.test(statusCompact)
+          ? "BERMASALAH"
+          : /(^|[^A-Z])(OFF|0FF|ORR)([^A-Z]|$)/.test(joined.toUpperCase())
+            ? "OFF"
+            : "";
       const bank = joined.match(bankPattern)?.[1]?.toUpperCase() || "BANK";
       let accountName = valueAfterLabel(block, /(?:nama|pemilik|account\s*name)/i).replace(/^(?:rekening|pemilik)\s*/i, "").trim();
       if (!accountName || /nomor|no\.?\s*rek|saldo|balance/i.test(accountName)) {
@@ -895,13 +903,153 @@ export default function Home() {
       const balanceLine = block.find((line) => /saldo|balance|rp\.?\s*[\d.,]+/i.test(line)) || "";
       const balanceMatch = balanceLine.match(/(?:Rp\.?\s*)?([\d][\d.,]*)/i);
       const balance = balanceMatch?.[1]?.replace(/[^\d]/g, "") || "";
-      let description = valueAfterLabel(block, /(?:keterangan|status|alasan|remark|kendala)/i);
-      if (!description || /^[-:]$/.test(description)) {
-        description = block.find((line) => /blokir|beku|freeze|tutup|off|cabut|masalah|maintenance|suspend|nonaktif|tidak aktif|gagal|limit|verifikasi|follow.?up/i.test(line) && !/keterangan|status|alasan|remark/i.test(line)) || "Perlu follow-up sesuai informasi pada screenshot";
-      }
-      return { id: crypto.randomUUID(), bank, accountName, accountNumber: number, balance, description };
+      return { id: crypto.randomUUID(), bank, accountName, accountNumber: number, balance, description: issueStatus };
     });
-    return entries.length ? entries : [{ id: crypto.randomUUID(), bank: "BANK", accountName: "", accountNumber: "", balance: "", description: "" }];
+    return entries.filter((item) => /^(OFF|BERMASALAH|DICABUT)$/.test(item.description));
+  };
+
+  const parseFollowupTableWords = (words: any[], imageWidth: number, imageHeight: number): FollowupBankEntry[] => {
+    if (!words?.length || !imageWidth || !imageHeight) return [];
+    const clean = (value: string) => String(value || "").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
+    const centerX = (word: any) => (Number(word?.bbox?.x0 || 0) + Number(word?.bbox?.x1 || 0)) / 2;
+    const centerY = (word: any) => (Number(word?.bbox?.y0 || 0) + Number(word?.bbox?.y1 || 0)) / 2;
+    const readable = words.filter((word) => clean(word.text) && Number(word.confidence ?? word.conf ?? 100) > 18);
+    const balanceWords = readable
+      .filter((word) => centerY(word) >= imageHeight * 0.72 && /\d/.test(clean(word.text)))
+      .map((word) => ({ word, x: centerX(word), number: clean(word.text).replace(/[Oo]/g, "0").replace(/\D/g, "") }))
+      .filter((item) => item.number.length >= 1)
+      .sort((a, b) => a.x - b.x);
+    if (balanceWords.length < 2) return [];
+    const anchors = balanceWords.reduce<{ x: number; balance: string }[]>((result, item) => {
+      const previous = result.at(-1);
+      if (previous && Math.abs(previous.x - item.x) < imageWidth * 0.035) previous.balance += item.number;
+      else result.push({ x: item.x, balance: item.number });
+      return result;
+    }, []);
+    const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
+    const normalizeName = (value: string) => value.toUpperCase().replace(/\b(?:MYBCA|MY BCA|M-BCA|REKENING|BANK)\b/g, " ").replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
+    const result = anchors.map((anchor) => {
+      const columnWords = readable.filter((word) => {
+        const x = centerX(word);
+        return Math.abs(x - anchor.x) <= Math.min(...anchors.filter((other) => other !== anchor).map((other) => Math.abs(other.x - anchor.x)), imageWidth / anchors.length) * 0.48;
+      });
+      const rowText = (min: number, max: number) => columnWords
+        .filter((word) => centerY(word) >= imageHeight * min && centerY(word) < imageHeight * max)
+        .sort((a, b) => Number(a.bbox?.x0 || 0) - Number(b.bbox?.x0 || 0))
+        .map((word) => clean(word.text)).join(" ").trim();
+      const statusRaw = rowText(0, 0.23).replace(/[^A-Za-z0-9 ]/g, "").trim().toUpperCase();
+      const statusCompact = statusRaw.replace(/\s+/g, "");
+      const issueStatus = /D[I1]CABUT|CABUT/.test(statusCompact)
+        ? "DICABUT"
+        : /BERMASALAH|MASALAH/.test(statusCompact)
+          ? "BERMASALAH"
+          : /^(OFF|0FF|ORR)$/.test(statusCompact)
+            ? "OFF"
+            : "";
+      const bankArea = `${rowText(0.18, 0.43)} ${rowText(0.23, 0.55)}`;
+      const bank = bankArea.match(bankPattern)?.[1]?.toUpperCase() || "BANK";
+      const accountName = rowText(0.34, 0.79).replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, "").replace(bankPattern, "").replace(/^[\s/.-]+|[\s/.-]+$/g, "").trim();
+      const nameKey = normalizeName(accountName);
+      const stored = bankAccounts.find((account) => {
+        const storedName = normalizeName(account.accountName);
+        const sameBank = bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase());
+        const detectedTokens = accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2 && !/^(MYBCA|BCA|BANK)$/.test(token));
+        const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
+        const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => storedToken === token || storedToken.includes(token) || token.includes(storedToken))).length;
+        const fuzzyName = detectedTokens.length > 0 && tokenMatches / detectedTokens.length >= 0.6;
+        return sameBank && nameKey.length >= 4 && (storedName === nameKey || storedName.includes(nameKey) || nameKey.includes(storedName) || fuzzyName);
+      });
+      return {
+        id: crypto.randomUUID(),
+        bank: stored?.bankType || bank,
+        accountName: stored?.accountName || accountName,
+        accountNumber: stored?.accountNumber || "",
+        balance: anchor.balance,
+        description: issueStatus,
+      };
+    });
+    return result.filter((item) => /^(OFF|BERMASALAH|DICABUT)$/.test(item.description));
+  };
+
+  const followupIssueStatus = (value: string) => {
+    const compact = String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (/D[I1]CABUT|CABUT/.test(compact)) return "DICABUT";
+    if (/BERMASALAH|MASALAH/.test(compact)) return "BERMASALAH";
+    if (/(^|[^A-Z])(OFF|0FF|ORR)([^A-Z]|$)/.test(String(value || "").toUpperCase()) || /^(OFF|0FF|ORR)$/.test(compact)) return "OFF";
+    return "";
+  };
+
+  const detectFollowupRedColumns = (canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return [] as { x: number; width: number }[];
+    const { width, height } = canvas;
+    const pixels = context.getImageData(0, 0, width, height).data;
+    const edgeScores = new Array(width).fill(0);
+    for (let x = 1; x < width; x += 1) {
+      let score = 0;
+      for (let y = 0; y < height; y += 1) {
+        const at = (y * width + x) * 4;
+        const before = at - 4;
+        score += Math.abs(pixels[at] - pixels[before]) + Math.abs(pixels[at + 1] - pixels[before + 1]) + Math.abs(pixels[at + 2] - pixels[before + 2]);
+      }
+      edgeScores[x] = score / (height * 3);
+    }
+    const groups: number[][] = [];
+    for (let x = 1; x < width; x += 1) {
+      if (edgeScores[x] < 62) continue;
+      const group = groups.at(-1);
+      if (group && x - group.at(-1)! <= 3) group.push(x);
+      else groups.push([x]);
+    }
+    let boundaries = groups.map((group) => group.reduce((best, x) => edgeScores[x] > edgeScores[best] ? x : best, group[0])).sort((a, b) => a - b);
+    boundaries = boundaries.filter((x, index) => index === 0 || x - boundaries[index - 1] >= Math.max(25, width * 0.045));
+    if (!boundaries.length || boundaries[0] > width * 0.04) boundaries.unshift(0);
+    if (boundaries.at(-1)! < width * 0.96) boundaries.push(width - 1);
+    const columns: { x: number; width: number }[] = [];
+    for (let i = 0; i < boundaries.length - 1; i += 1) {
+      const left = boundaries[i] + 2;
+      const right = boundaries[i + 1] - 2;
+      if (right - left < width * 0.055) continue;
+      let red = 0;
+      let sampled = 0;
+      const top = Math.max(1, Math.round(height * 0.03));
+      const bottom = Math.max(top + 1, Math.round(height * 0.2));
+      for (let y = top; y < bottom; y += 1) {
+        for (let x = left; x <= right; x += 2) {
+          const at = (y * width + x) * 4;
+          const r = pixels[at], g = pixels[at + 1], b = pixels[at + 2];
+          if (r > 115 && g < 60 && b < 90 && r > g * 1.8) red += 1;
+          sampled += 1;
+        }
+      }
+      if (sampled && red / sampled >= 0.12) columns.push({ x: left, width: right - left + 1 });
+    }
+    return columns;
+  };
+
+  const parseFollowupCell = (words: any[], width: number, height: number, rawText: string, balanceOverride = ""): FollowupBankEntry | null => {
+    const clean = (value: string) => String(value || "").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
+    const centerY = (word: any) => (Number(word?.bbox?.y0 || 0) + Number(word?.bbox?.y1 || 0)) / 2;
+    const sorted = (min: number, max: number) => words.filter((word) => centerY(word) >= height * min && centerY(word) < height * max).sort((a, b) => Number(a?.bbox?.y0 || 0) - Number(b?.bbox?.y0 || 0) || Number(a?.bbox?.x0 || 0) - Number(b?.bbox?.x0 || 0));
+    const row = (min: number, max: number) => sorted(min, max).map((word) => clean(word.text)).filter(Boolean).join(" ");
+    const description = followupIssueStatus(`${row(0, 0.25)} ${rawText}`) || "OFF";
+    const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
+    const bank = (row(0.18, 0.48).match(bankPattern)?.[1] || rawText.match(bankPattern)?.[1] || "BANK").toUpperCase();
+    const accountName = row(0.34, 0.79).replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, "").replace(bankPattern, "").replace(/^[\s/.,-]+|[\s/.,-]+$/g, "").trim();
+    const balanceText = (balanceOverride || row(0.76, 1)).replace(/[Oo]/g, "0");
+    const balanceDigits = (balanceText.match(/[\d][\d.,\s]*/)?.[0] || "").replace(/\D/g, "");
+    const balance = /^0+$/.test(balanceDigits) ? "0" : balanceDigits;
+    const normalize = (value: string) => value.toUpperCase().replace(/\b(?:MYBCA|MY BCA|M-BCA|REKENING|BANK)\b/g, " ").replace(/[^A-Z0-9]/g, "");
+    const detectedTokens = accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2 && !/^(MYBCA|BCA|BANK)$/.test(token));
+    const stored = bankAccounts.find((account) => {
+      const storedName = normalize(account.accountName);
+      const name = normalize(accountName);
+      const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
+      const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => storedToken === token || storedToken.includes(token) || token.includes(storedToken))).length;
+      const sameBank = bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase());
+      return sameBank && name.length >= 3 && (storedName === name || storedName.includes(name) || name.includes(storedName) || (detectedTokens.length > 0 && tokenMatches / detectedTokens.length >= 0.6));
+    });
+    return { id: crypto.randomUUID(), bank: stored?.bankType || bank, accountName: stored?.accountName || accountName, accountNumber: stored?.accountNumber || "", balance, description };
   };
 
   const loadTesseract = async () => {
@@ -929,18 +1077,79 @@ export default function Home() {
     try {
       const Tesseract = await loadTesseract();
       const texts: string[] = [];
-      for (let i = 0; i < selected.length; i += 1) {
-        setFollowupProgress(`MEMBACA GAMBAR ${i + 1} DARI ${selected.length}...`);
-        const result = await Tesseract.recognize(selected[i], "eng", {
-          logger: (message: any) => {
-            if (message.status === "recognizing text") setFollowupProgress(`MEMBACA GAMBAR ${i + 1}/${selected.length} · ${Math.round((message.progress || 0) * 100)}%`);
-          },
-        });
-        texts.push(String(result?.data?.text || ""));
+      const detected: FollowupBankEntry[] = [];
+      const worker = await Tesseract.createWorker("eng", 1, {
+        logger: (message: any) => {
+          if (message.status === "recognizing text") setFollowupProgress(`MEMBACA KOTAK BANK · ${Math.round((message.progress || 0) * 100)}%`);
+        },
+      });
+      await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK });
+      try {
+        for (let i = 0; i < selected.length; i += 1) {
+          setFollowupProgress(`MENYIAPKAN GAMBAR ${i + 1} DARI ${selected.length}...`);
+          const bitmap = await createImageBitmap(selected[i]);
+          const source = document.createElement("canvas");
+          source.width = bitmap.width;
+          source.height = bitmap.height;
+          const sourceContext = source.getContext("2d", { willReadFrequently: true });
+          if (!sourceContext) throw new Error("Browser tidak dapat menyiapkan gambar untuk dibaca.");
+          sourceContext.drawImage(bitmap, 0, 0);
+          bitmap.close();
+          const columns = detectFollowupRedColumns(source);
+          for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+            const column = columns[columnIndex];
+            setFollowupProgress(`GAMBAR ${i + 1}/${selected.length} · MEMBACA BANK ${columnIndex + 1}/${columns.length}`);
+            const scale = Math.max(5, Math.ceil(560 / column.width));
+            const cell = document.createElement("canvas");
+            cell.width = column.width * scale;
+            cell.height = source.height * scale;
+            const cellContext = cell.getContext("2d");
+            if (!cellContext) continue;
+            cellContext.imageSmoothingEnabled = false;
+            cellContext.drawImage(source, column.x, 0, column.width, source.height, 0, 0, cell.width, cell.height);
+            const result = await worker.recognize(cell);
+            const rawText = String(result?.data?.text || "");
+            texts.push(rawText);
+            const balanceY = Math.round(source.height * 0.77);
+            const balanceSmall = document.createElement("canvas");
+            balanceSmall.width = Math.max(1, column.width - 6);
+            balanceSmall.height = Math.max(1, source.height - balanceY - 2);
+            const balanceSmallContext = balanceSmall.getContext("2d", { willReadFrequently: true });
+            let balanceRaw = "";
+            if (balanceSmallContext) {
+              balanceSmallContext.drawImage(source, column.x + 3, balanceY, balanceSmall.width, balanceSmall.height, 0, 0, balanceSmall.width, balanceSmall.height);
+              const image = balanceSmallContext.getImageData(0, 0, balanceSmall.width, balanceSmall.height);
+              for (let pixel = 0; pixel < image.data.length; pixel += 4) {
+                const luminance = image.data[pixel] * 0.299 + image.data[pixel + 1] * 0.587 + image.data[pixel + 2] * 0.114;
+                const color = luminance > 135 ? 0 : 255;
+                image.data[pixel] = color; image.data[pixel + 1] = color; image.data[pixel + 2] = color; image.data[pixel + 3] = 255;
+              }
+              balanceSmallContext.putImageData(image, 0, 0);
+              const balanceCanvas = document.createElement("canvas");
+              balanceCanvas.width = balanceSmall.width * 9;
+              balanceCanvas.height = balanceSmall.height * 9;
+              const balanceContext = balanceCanvas.getContext("2d");
+              if (balanceContext) {
+                balanceContext.imageSmoothingEnabled = false;
+                balanceContext.drawImage(balanceSmall, 0, 0, balanceCanvas.width, balanceCanvas.height);
+                await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789,." });
+                const balanceResult = await worker.recognize(balanceCanvas);
+                balanceRaw = String(balanceResult?.data?.text || "");
+                await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "" });
+              }
+            }
+            const entry = parseFollowupCell(result?.data?.words || [], cell.width, cell.height, rawText, balanceRaw);
+            if (entry) detected.push(entry);
+          }
+        }
+      } finally {
+        await worker.terminate();
       }
       const combined = texts.join("\n\n");
       setFollowupOcrText(combined);
-      setFollowupEntries(parseFollowupBankText(combined));
+      const finalEntries = detected;
+      setFollowupEntries(finalEntries);
+      if (!finalEntries.length) setFollowupError("Tidak ditemukan status OFF, BERMASALAH, atau DICABUT pada screenshot.");
       setFollowupProgress("SELESAI DIBACA");
     } catch (error) {
       setFollowupError(error instanceof Error ? error.message : "Screenshot gagal dibaca.");
@@ -2078,7 +2287,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER</span><h1>Followup Bank Bermasalah</h1><p>Upload screenshot dari ADM. Sistem mengambil bank, nama rekening, nomor rekening, saldo, dan keterangan secara otomatis.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V3 PER KOLOM</span><h1>Followup Bank Bermasalah</h1><p>Upload screenshot dari ADM. Sistem mengambil bank, nama rekening, nomor rekening, saldo, dan keterangan secara otomatis.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
@@ -2101,7 +2310,7 @@ export default function Home() {
                         <header><b>REKENING {index + 1}</b><button onClick={() => setFollowupEntries((current) => current.filter((entry) => entry.id !== item.id))}>HAPUS</button></header>
                         <label>BANK<input value={item.bank} onChange={(event) => updateFollowupEntry(item.id, "bank", event.target.value.toUpperCase())} /></label>
                         <label>NAMA REKENING<input value={item.accountName} onChange={(event) => updateFollowupEntry(item.id, "accountName", event.target.value)} /></label>
-                        <label>NOMOR REKENING<input value={item.accountNumber} onChange={(event) => updateFollowupEntry(item.id, "accountNumber", event.target.value.replace(/\D/g, ""))} /></label>
+                        <label>NOMOR REKENING<input placeholder="Dicari dari Data Bank Situs" value={item.accountNumber} onChange={(event) => updateFollowupEntry(item.id, "accountNumber", event.target.value.replace(/\D/g, ""))} />{!item.accountNumber && <small className="followupMissing">BELUM COCOK DENGAN DATA BANK SITUS</small>}</label>
                         <label>SALDO (RP)<input inputMode="numeric" value={item.balance} onChange={(event) => updateFollowupEntry(item.id, "balance", event.target.value.replace(/\D/g, ""))} /></label>
                         <label className="wide">KETERANGAN<textarea value={item.description} onChange={(event) => updateFollowupEntry(item.id, "description", event.target.value)} /></label>
                       </article>) : <div className="bankOffEmpty">Upload screenshot untuk membaca data rekening secara otomatis.</div>}
@@ -3755,7 +3964,7 @@ export default function Home() {
           .shell.lightMode .bankOffNoMatch{color:#116e50;background:#e7fff5}
           .bankOffMaintenanceNote{display:flex;align-items:center;gap:10px;padding:13px 18px;border:1px solid rgba(238,203,77,.4);border-left:4px solid #ffe24f;border-radius:9px;color:#dce9e9;background:linear-gradient(90deg,rgba(255,224,58,.12),rgba(0,211,255,.045));font-size:10px;font-weight:800;line-height:1.55;box-shadow:0 8px 25px rgba(0,0,0,.16)}
           .bankOffMaintenanceNote strong{flex:0 0 auto;color:#ffe65e;font-size:11px;font-weight:950;letter-spacing:.04em}.shell.lightMode .bankOffMaintenanceNote{color:#344f54;background:linear-gradient(90deg,#fff8d8,#eef8f7)}
-          .followupBankGrid{display:block!important;max-width:1540px}.followupBankStudio{display:grid;gap:18px}.followupBankHero{display:flex;align-items:center;gap:20px;padding:25px 28px;border-color:rgba(255,180,70,.32)!important}.followupBankHero>div{margin-right:auto}.followupBankHero span{color:#ffbd61;font-size:9px;font-weight:950;letter-spacing:.16em}.followupBankHero h1{margin:7px 0 5px;font-size:31px}.followupBankHero p{max-width:820px;margin:0;color:#9eb4b9;font-size:11px;line-height:1.6}.followupBankHero>b{padding:13px 16px;border:1px solid rgba(255,180,70,.32);border-radius:9px;color:#ffd18b;background:#261a0b;font-size:9px}.followupBankColumns{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(420px,1.25fr) minmax(350px,1fr);gap:14px;align-items:start}.followupBankColumns>.panel{overflow:hidden}.followupBody{display:grid;gap:13px;padding:20px}.followupDropzone{display:grid;place-items:center;min-height:230px;padding:24px;border:2px dashed rgba(255,183,81,.48);border-radius:13px;cursor:pointer;text-align:center;background:linear-gradient(145deg,rgba(255,174,55,.08),rgba(45,178,195,.05))}.followupDropzone.reading{cursor:wait;animation:urgentNotePulse 1.4s infinite}.followupDropzone input{display:none}.followupDropzone i{font-style:normal;color:#ffc46d;font-size:45px}.followupDropzone strong{margin-top:10px;color:#f7e0b7;font-size:11px}.followupDropzone small{margin-top:7px;color:#879da3;font-size:8px}.followupThumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.followupThumbs figure{min-width:0;margin:0;padding:6px;border:1px solid rgba(98,167,177,.22);border-radius:8px;background:#09171c}.followupThumbs img{width:100%;height:90px;object-fit:cover;border-radius:5px}.followupThumbs figcaption{margin-top:5px;overflow:hidden;color:#91a7ad;font-size:7px;text-overflow:ellipsis;white-space:nowrap}.followupRaw summary{cursor:pointer;color:#8fdce5;font-size:8px;font-weight:900}.followupRaw textarea{width:100%;min-height:170px;margin-top:9px;padding:11px;border:1px solid #34525a;border-radius:8px;color:#dce8e9;background:#071318;font:700 9px/1.55 "Lexend",sans-serif}.followupRaw button,.followupEditPanel .panelHead button{padding:8px 10px;border:1px solid #48747c;border-radius:7px;color:#bdebf0;background:#153038;font-size:7px;font-weight:900}.followupEntryList{max-height:720px;overflow:auto}.followupEntry{display:grid;grid-template-columns:.55fr 1.45fr;gap:10px;padding:13px;border:1px solid rgba(255,187,86,.25);border-radius:10px;background:#0b191e}.followupEntry header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.followupEntry header b{color:#ffca77;font-size:9px}.followupEntry header button{border:0;color:#ff8d9d;background:transparent;font-size:7px;font-weight:900}.followupEntry label{display:grid;gap:5px;color:#849da3;font-size:7px;font-weight:900}.followupEntry label.wide{grid-column:1/-1}.followupEntry input,.followupEntry textarea{min-width:0;padding:10px;border:1px solid rgba(91,164,176,.25);border-radius:7px;color:#ecf4f4;background:#071318;font:750 9px "Lexend",sans-serif}.followupEntry textarea{min-height:65px;resize:vertical}.followupReport{min-height:520px;margin:0;padding:17px;border:1px solid rgba(255,190,87,.3);border-radius:10px;overflow:auto;white-space:pre-wrap;color:#f0e7d5;background:#0b130f;font:750 10px/1.75 "Lexend",sans-serif}.followupOutputPanel{position:sticky;top:10px}.shell.lightMode .followupBankHero>b{color:#7a4b08;background:#fff3da}.shell.lightMode .followupDropzone,.shell.lightMode .followupEntry,.shell.lightMode .followupRaw textarea,.shell.lightMode .followupEntry input,.shell.lightMode .followupEntry textarea,.shell.lightMode .followupReport{color:#29464b;background:#fff}.shell.lightMode .followupDropzone strong{color:#76501b}@media(max-width:1250px){.followupBankColumns{grid-template-columns:1fr 1fr}.followupOutputPanel{position:static;grid-column:1/-1}.followupReport{min-height:360px}}@media(max-width:760px){.followupBankColumns{grid-template-columns:1fr}.followupOutputPanel{grid-column:auto}.followupEntry{grid-template-columns:1fr}.followupEntry label.wide,.followupEntry header{grid-column:auto}}
+          .followupBankGrid{display:block!important;max-width:1540px}.followupBankStudio{display:grid;gap:18px}.followupBankHero{display:flex;align-items:center;gap:20px;padding:25px 28px;border-color:rgba(255,180,70,.32)!important}.followupBankHero>div{margin-right:auto}.followupBankHero span{color:#ffbd61;font-size:9px;font-weight:950;letter-spacing:.16em}.followupBankHero h1{margin:7px 0 5px;font-size:31px}.followupBankHero p{max-width:820px;margin:0;color:#9eb4b9;font-size:11px;line-height:1.6}.followupBankHero>b{padding:13px 16px;border:1px solid rgba(255,180,70,.32);border-radius:9px;color:#ffd18b;background:#261a0b;font-size:9px}.followupBankColumns{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(420px,1.25fr) minmax(350px,1fr);gap:14px;align-items:start}.followupBankColumns>.panel{overflow:hidden}.followupBody{display:grid;gap:13px;padding:20px}.followupDropzone{display:grid;place-items:center;min-height:230px;padding:24px;border:2px dashed rgba(255,183,81,.48);border-radius:13px;cursor:pointer;text-align:center;background:linear-gradient(145deg,rgba(255,174,55,.08),rgba(45,178,195,.05))}.followupDropzone.reading{cursor:wait;animation:urgentNotePulse 1.4s infinite}.followupDropzone input{display:none}.followupDropzone i{font-style:normal;color:#ffc46d;font-size:45px}.followupDropzone strong{margin-top:10px;color:#f7e0b7;font-size:11px}.followupDropzone small{margin-top:7px;color:#879da3;font-size:8px}.followupThumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.followupThumbs figure{min-width:0;margin:0;padding:6px;border:1px solid rgba(98,167,177,.22);border-radius:8px;background:#09171c}.followupThumbs img{width:100%;height:90px;object-fit:cover;border-radius:5px}.followupThumbs figcaption{margin-top:5px;overflow:hidden;color:#91a7ad;font-size:7px;text-overflow:ellipsis;white-space:nowrap}.followupRaw summary{cursor:pointer;color:#8fdce5;font-size:8px;font-weight:900}.followupRaw textarea{width:100%;min-height:170px;margin-top:9px;padding:11px;border:1px solid #34525a;border-radius:8px;color:#dce8e9;background:#071318;font:700 9px/1.55 "Lexend",sans-serif}.followupRaw button,.followupEditPanel .panelHead button{padding:8px 10px;border:1px solid #48747c;border-radius:7px;color:#bdebf0;background:#153038;font-size:7px;font-weight:900}.followupEntryList{max-height:720px;overflow:auto}.followupEntry{display:grid;grid-template-columns:.55fr 1.45fr;gap:10px;padding:13px;border:1px solid rgba(255,187,86,.25);border-radius:10px;background:#0b191e}.followupEntry header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.followupEntry header b{color:#ffca77;font-size:9px}.followupEntry header button{border:0;color:#ff8d9d;background:transparent;font-size:7px;font-weight:900}.followupEntry label{display:grid;gap:5px;color:#849da3;font-size:7px;font-weight:900}.followupEntry label.wide{grid-column:1/-1}.followupEntry input,.followupEntry textarea{min-width:0;padding:10px;border:1px solid rgba(91,164,176,.25);border-radius:7px;color:#ecf4f4;background:#071318;font:750 9px "Lexend",sans-serif}.followupEntry textarea{min-height:65px;resize:vertical}.followupMissing{color:#ff8b9b!important;font-size:6px!important;line-height:1.35}.followupReport{min-height:520px;margin:0;padding:17px;border:1px solid rgba(255,190,87,.3);border-radius:10px;overflow:auto;white-space:pre-wrap;color:#f0e7d5;background:#0b130f;font:750 10px/1.75 "Lexend",sans-serif}.followupOutputPanel{position:sticky;top:10px}.shell.lightMode .followupBankHero>b{color:#7a4b08;background:#fff3da}.shell.lightMode .followupDropzone,.shell.lightMode .followupEntry,.shell.lightMode .followupRaw textarea,.shell.lightMode .followupEntry input,.shell.lightMode .followupEntry textarea,.shell.lightMode .followupReport{color:#29464b;background:#fff}.shell.lightMode .followupDropzone strong{color:#76501b}@media(max-width:1250px){.followupBankColumns{grid-template-columns:1fr 1fr}.followupOutputPanel{position:static;grid-column:1/-1}.followupReport{min-height:360px}}@media(max-width:760px){.followupBankColumns{grid-template-columns:1fr}.followupOutputPanel{grid-column:auto}.followupEntry{grid-template-columns:1fr}.followupEntry label.wide,.followupEntry header{grid-column:auto}}
           @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
           @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
           @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}.resultTrackerHero{padding:18px}.resultLiveClock{width:100%}.resultMarketCards,.resultMarketForm,.resultPrizeInputs{grid-template-columns:1fr}.resultMarketList>div{grid-template-columns:1fr 1fr}.resultMarketList small{grid-column:1/-1}}
