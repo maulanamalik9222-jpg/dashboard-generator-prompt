@@ -1053,7 +1053,7 @@ export default function Home() {
     return columns;
   };
 
-  const parseFollowupCell = (words: any[], width: number, height: number, rawText: string, balanceOverride = "", nameOverride = ""): FollowupBankEntry | null => {
+  const parseFollowupCell = (words: any[], width: number, height: number, rawText: string, balanceOverride = "", nameOverrides: string[] = []): FollowupBankEntry | null => {
     const clean = (value: string) => String(value || "").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
     const centerY = (word: any) => (Number(word?.bbox?.y0 || 0) + Number(word?.bbox?.y1 || 0)) / 2;
     const sorted = (min: number, max: number) => words.filter((word) => centerY(word) >= height * min && centerY(word) < height * max).sort((a, b) => Number(a?.bbox?.y0 || 0) - Number(b?.bbox?.y0 || 0) || Number(a?.bbox?.x0 || 0) - Number(b?.bbox?.x0 || 0));
@@ -1062,48 +1062,44 @@ export default function Home() {
     if (description === "DICABUT") return null;
     const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB|DANAMON|PERMATA|PANIN|MAYBANK|OCBC|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|DANA|OVO|GOPAY)\b/i;
     const bank = (row(0.18, 0.48).match(bankPattern)?.[1] || rawText.match(bankPattern)?.[1] || "BANK").toUpperCase();
-    let accountName = (nameOverride || row(0.34, 0.79))
-      .replace(/^\s*\d+\s*/, "")
-      .replace(/\bKAS\s+BESAR\b/ig, " ")
-      .replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, " ")
-      .replace(bankPattern, " ")
-      .replace(/^[\s/.,:-]+|[\s/.,:-]+$/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (accountName.includes("/")) accountName = accountName.split("/").at(-1)?.trim() || accountName;
-    const nameParts = accountName.split(/\s+/).filter(Boolean);
-    const firstNamePart = (nameParts[0] || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
     const cleanBank = bank.replace(/[^A-Z0-9]/g, "");
-    if (firstNamePart && (followupTokenSimilar(firstNamePart, cleanBank) || (cleanBank === "MANDIRI" && /^MAN[DL]?IR/i.test(firstNamePart)))) {
-      nameParts.shift();
-      accountName = nameParts.join(" ").replace(/^[f|/.,:-]+/i, "").trim();
-    }
+    const cleanDetectedName = (source: string) => {
+      let value = String(source || "")
+        .replace(/^\s*\d+\s*/, "")
+        .replace(/\bKAS\s+BESAR\b/ig, " ")
+        .replace(/\b(?:MYBCA|MY BCA|M-BCA)\s*\/?\s*/ig, " ")
+        .replace(bankPattern, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (value.includes("/")) value = value.split("/").at(-1)?.trim() || value;
+      const parts = value.split(/\s+/).filter(Boolean);
+      const first = (parts[0] || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+      if (first && (followupTokenSimilar(first, cleanBank) || (cleanBank === "MANDIRI" && /^MAN[DL]?IR/i.test(first)))) parts.shift();
+      return parts.join(" ").replace(/^[f|/.,:-]+/i, "").replace(/[^A-Za-z0-9 .'-]/g, " ").replace(/\s+/g, " ").trim();
+    };
+    const nameCandidates = [...nameOverrides, row(0.34, 0.79)].map(cleanDetectedName).filter((value, index, all) => value.length >= 2 && all.indexOf(value) === index);
+    let accountName = nameCandidates[0] || "";
     const balanceText = (balanceOverride || row(0.76, 1)).replace(/[Oo]/g, "0");
     const balanceDigits = (balanceText.match(/[\d][\d.,\s]*/)?.[0] || "").replace(/\D/g, "");
     const balance = /^0+$/.test(balanceDigits) ? "0" : balanceDigits;
     const normalize = (value: string) => value.toUpperCase().replace(/\b(?:MYBCA|MY BCA|M-BCA|REKENING|BANK)\b/g, " ").replace(/[^A-Z0-9]/g, "");
-    const detectedTokens = accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2 && !/^(MYBCA|BCA|BANK)$/.test(token));
-    const directStored = bankAccounts.find((account) => {
-      const storedName = normalize(account.accountName);
-      const name = normalize(accountName);
-      const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
-      const tokenMatches = detectedTokens.filter((token) => storedTokens.some((storedToken) => followupTokenSimilar(storedToken, token))).length;
-      const storedMatches = storedTokens.filter((storedToken) => detectedTokens.some((token) => followupTokenSimilar(storedToken, token))).length;
-      const sameBank = bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase());
-      const detectedCoverage = detectedTokens.length > 0 && tokenMatches / detectedTokens.length >= 0.6;
-      const storedCoverage = storedTokens.length > 0 && storedMatches / storedTokens.length >= 0.8;
-      return sameBank && name.length >= 3 && (storedName === name || storedName.includes(name) || name.includes(storedName) || detectedCoverage || storedCoverage);
-    });
-    const stored = directStored || bankAccounts
+    const stored = bankAccounts
       .filter((account) => bank === "BANK" || account.bankType.toUpperCase().includes(bank) || bank.includes(account.bankType.toUpperCase()))
       .map((account) => {
         const storedName = normalize(account.accountName);
-        const detectedName = normalize(accountName);
-        const similarity = storedName && detectedName ? 1 - followupEditDistance(storedName, detectedName) / Math.max(storedName.length, detectedName.length) : 0;
-        return { account, similarity };
+        const storedTokens = account.accountName.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
+        const score = nameCandidates.reduce((best, candidate) => {
+          const detectedName = normalize(candidate);
+          const detectedTokens = candidate.toUpperCase().split(/[^A-Z0-9]+/).filter((token) => token.length >= 2);
+          const similarity = storedName && detectedName ? 1 - followupEditDistance(storedName, detectedName) / Math.max(storedName.length, detectedName.length) : 0;
+          const storedMatches = storedTokens.filter((storedToken) => detectedTokens.some((token) => followupTokenSimilar(storedToken, token))).length;
+          const coverage = storedTokens.length ? storedMatches / storedTokens.length : 0;
+          return Math.max(best, similarity, coverage * 0.92);
+        }, 0);
+        return { account, score };
       })
-      .filter((candidate) => candidate.similarity >= 0.55)
-      .sort((left, right) => right.similarity - left.similarity)[0]?.account;
+      .filter((candidate) => candidate.score >= 0.52)
+      .sort((left, right) => right.score - left.score)[0]?.account;
     return { id: crypto.randomUUID(), bank: stored?.bankType || bank, accountName: stored?.accountName || accountName, accountNumber: stored?.accountNumber || "", balance, description };
   };
 
@@ -1172,27 +1168,35 @@ export default function Home() {
             nameSmall.width = Math.max(1, column.width - 6);
             nameSmall.height = Math.max(1, nameBottom - nameY);
             const nameSmallContext = nameSmall.getContext("2d", { willReadFrequently: true });
-            let nameRaw = "";
+            const nameRaws: string[] = [];
             if (nameSmallContext) {
               nameSmallContext.drawImage(source, column.x + 3, nameY, nameSmall.width, nameSmall.height, 0, 0, nameSmall.width, nameSmall.height);
-              const nameImage = nameSmallContext.getImageData(0, 0, nameSmall.width, nameSmall.height);
-              for (let pixel = 0; pixel < nameImage.data.length; pixel += 4) {
-                const color = nameImage.data[pixel] > 50 ? 255 : 0;
-                nameImage.data[pixel] = color; nameImage.data[pixel + 1] = color; nameImage.data[pixel + 2] = color; nameImage.data[pixel + 3] = 255;
-              }
-              nameSmallContext.putImageData(nameImage, 0, 0);
-              const nameCanvas = document.createElement("canvas");
-              nameCanvas.width = nameSmall.width * 9;
-              nameCanvas.height = nameSmall.height * 9;
-              const nameContext = nameCanvas.getContext("2d");
-              if (nameContext) {
+              const originalNameImage = nameSmallContext.getImageData(0, 0, nameSmall.width, nameSmall.height);
+              for (const threshold of [40, 50, 65, 80]) {
+                const thresholdCanvas = document.createElement("canvas");
+                thresholdCanvas.width = nameSmall.width;
+                thresholdCanvas.height = nameSmall.height;
+                const thresholdContext = thresholdCanvas.getContext("2d");
+                if (!thresholdContext) continue;
+                const nameImage = new ImageData(new Uint8ClampedArray(originalNameImage.data), originalNameImage.width, originalNameImage.height);
+                for (let pixel = 0; pixel < nameImage.data.length; pixel += 4) {
+                  const color = nameImage.data[pixel] > threshold ? 255 : 0;
+                  nameImage.data[pixel] = color; nameImage.data[pixel + 1] = color; nameImage.data[pixel + 2] = color; nameImage.data[pixel + 3] = 255;
+                }
+                thresholdContext.putImageData(nameImage, 0, 0);
+                const nameCanvas = document.createElement("canvas");
+                nameCanvas.width = nameSmall.width * 9;
+                nameCanvas.height = nameSmall.height * 9;
+                const nameContext = nameCanvas.getContext("2d");
+                if (!nameContext) continue;
                 nameContext.imageSmoothingEnabled = false;
-                nameContext.drawImage(nameSmall, 0, 0, nameCanvas.width, nameCanvas.height);
+                nameContext.drawImage(thresholdCanvas, 0, 0, nameCanvas.width, nameCanvas.height);
                 await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /.-" });
                 const nameResult = await worker.recognize(nameCanvas);
-                nameRaw = String(nameResult?.data?.text || "");
-                await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "" });
+                const nameRaw = String(nameResult?.data?.text || "").trim();
+                if (nameRaw && !nameRaws.includes(nameRaw)) nameRaws.push(nameRaw);
               }
+              await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "" });
             }
             const balanceY = Math.round(source.height * 0.77);
             const balanceSmall = document.createElement("canvas");
@@ -1222,7 +1226,7 @@ export default function Home() {
                 await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "" });
               }
             }
-            const entry = parseFollowupCell(result?.data?.words || [], cell.width, cell.height, rawText, balanceRaw, nameRaw);
+            const entry = parseFollowupCell(result?.data?.words || [], cell.width, cell.height, rawText, balanceRaw, nameRaws);
             if (entry) detected.push({ ...entry, sourceImageId: preparedFiles[i].id });
           }
         }
@@ -2387,7 +2391,7 @@ export default function Home() {
             {kind === "followupBank" ? (
               <section className="followupBankStudio">
                 <section className="panel followupBankHero">
-                  <div><span>SMART SCREENSHOT READER · ENGINE V9 NAME CONTRAST</span><h1>Followup Bank Bermasalah</h1><p>Kontras nama pada kotak merah ditingkatkan. Label bank sebelum tanda pemisah dibuang sebelum pencocokan Data Bank Situs.</p></div>
+                  <div><span>SMART SCREENSHOT READER · ENGINE V10 MULTI-PASS MATCH</span><h1>Followup Bank Bermasalah</h1><p>Setiap nama dibaca dengan empat tingkat kontras, lalu kandidat terbaik dicocokkan dengan Data Bank Situs pada bank yang sama.</p></div>
                   <b>{followupEntries.length} REKENING TERBACA</b>
                 </section>
                 {followupError && <div className="bankOffError">{followupError}</div>}
