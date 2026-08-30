@@ -16,7 +16,8 @@ type Kind =
   | "handover"
   | "resultTracker"
   | "resultArchive"
-  | "bankOff";
+  | "bankOff"
+  | "followupBank";
 type HandoverShift = "pagi" | "malam";
 type HandoverEntry = { id: string; content: string };
 type ResultMarket = {
@@ -56,6 +57,14 @@ type BankSiteAccount = {
   accountName: string;
   accountNumber: string;
   createdAt?: number;
+};
+type FollowupBankEntry = {
+  id: string;
+  bank: string;
+  accountName: string;
+  accountNumber: string;
+  balance: string;
+  description: string;
 };
 const DEFAULT_RESULT_SHIO: ShioSetting[] = [
   {name:"KUDA",numbers:"01, 13, 25, 37, 49, 61, 73, 85, 97"},
@@ -222,6 +231,12 @@ const kinds: { id: Kind; label: string; icon: string; hint: string }[] = [
     label: "Cek Rekening Off/Cabut",
     icon: "▤",
     hint: "Cocokkan info ADM dengan data bank",
+  },
+  {
+    id: "followupBank",
+    label: "Followup Bank Bermasalah",
+    icon: "⚠",
+    hint: "Upload SS dan buat laporan LINE otomatis",
   },
 ];
 
@@ -619,6 +634,13 @@ export default function Home() {
   const [bankError, setBankError] = useState("");
   const [bankCopied, setBankCopied] = useState(false);
   const [bankChecked, setBankChecked] = useState(false);
+  const [followupFiles, setFollowupFiles] = useState<{ name: string; url: string }[]>([]);
+  const [followupEntries, setFollowupEntries] = useState<FollowupBankEntry[]>([]);
+  const [followupOcrText, setFollowupOcrText] = useState("");
+  const [followupReading, setFollowupReading] = useState(false);
+  const [followupProgress, setFollowupProgress] = useState("");
+  const [followupError, setFollowupError] = useState("");
+  const [followupCopied, setFollowupCopied] = useState(false);
   const monitorCaptureResolvers = useRef(
     new Map<
       string,
@@ -841,6 +863,101 @@ export default function Home() {
     if (!bankCopyText) return;
     await navigator.clipboard.writeText(bankCopyText);
     setBankCopied(true);
+  };
+
+  const parseFollowupBankText = (raw: string): FollowupBankEntry[] => {
+    const lines = raw.split(/\r?\n/).map((line) => line.replace(/[|]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+    const bankPattern = /\b(BCA|BRI|BNI|MANDIRI|CIMB(?: NIAGA)?|DANAMON|PERMATA|PANIN|MAYBANK|OCBC(?: NISP)?|BSI|BTN|BTPN|JAGO|SEABANK|NEO|SINARMAS|MEGA|BUKOPIN|BJB|BANK JATIM|BANK JATENG|BANK SUMUT|BANK RIAU|BANK ACEH|DANA|OVO|GOPAY|SHOPEEPAY)\b/i;
+    const numberCandidates = lines.flatMap((line, index) => {
+      if (/saldo|balance|amount|nominal|rp\.?/i.test(line)) return [];
+      const cleaned = line.replace(/[Oo]/g, "0");
+      const matches = cleaned.match(/(?:\d[\s.-]*){7,22}/g) || [];
+      return matches.map((match) => ({ index, number: match.replace(/\D/g, "") })).filter((item) => item.number.length >= 7 && item.number.length <= 22);
+    });
+    const uniqueNumbers = Array.from(new Map(numberCandidates.map((item) => [item.number, item])).values());
+    const valueAfterLabel = (block: string[], label: RegExp) => {
+      for (let i = 0; i < block.length; i += 1) {
+        if (!label.test(block[i])) continue;
+        const inline = block[i].split(/\s*[:：]\s*/).slice(1).join(":").trim();
+        if (inline) return inline;
+        if (block[i + 1]) return block[i + 1];
+      }
+      return "";
+    };
+    const entries = uniqueNumbers.map(({ index, number }) => {
+      const block = lines.slice(Math.max(0, index - 6), Math.min(lines.length, index + 8));
+      const joined = block.join("\n");
+      const bank = joined.match(bankPattern)?.[1]?.toUpperCase() || "BANK";
+      let accountName = valueAfterLabel(block, /(?:nama|pemilik|account\s*name)/i).replace(/^(?:rekening|pemilik)\s*/i, "").trim();
+      if (!accountName || /nomor|no\.?\s*rek|saldo|balance/i.test(accountName)) {
+        accountName = block.find((line) => /^[A-Z][A-Z .'-]{3,}$/.test(line) && !bankPattern.test(line) && !/SALDO|KETERANGAN|STATUS|REKENING|FOLLOW/i.test(line)) || "";
+      }
+      const balanceLine = block.find((line) => /saldo|balance|rp\.?\s*[\d.,]+/i.test(line)) || "";
+      const balanceMatch = balanceLine.match(/(?:Rp\.?\s*)?([\d][\d.,]*)/i);
+      const balance = balanceMatch?.[1]?.replace(/[^\d]/g, "") || "";
+      let description = valueAfterLabel(block, /(?:keterangan|status|alasan|remark|kendala)/i);
+      if (!description || /^[-:]$/.test(description)) {
+        description = block.find((line) => /blokir|beku|freeze|tutup|off|cabut|masalah|maintenance|suspend|nonaktif|tidak aktif|gagal|limit|verifikasi|follow.?up/i.test(line) && !/keterangan|status|alasan|remark/i.test(line)) || "Perlu follow-up sesuai informasi pada screenshot";
+      }
+      return { id: crypto.randomUUID(), bank, accountName, accountNumber: number, balance, description };
+    });
+    return entries.length ? entries : [{ id: crypto.randomUUID(), bank: "BANK", accountName: "", accountNumber: "", balance: "", description: "" }];
+  };
+
+  const loadTesseract = async () => {
+    if ((window as any).Tesseract) return (window as any).Tesseract;
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Mesin pembaca gambar gagal dimuat. Periksa koneksi internet lalu coba lagi."));
+      document.head.appendChild(script);
+    });
+    return (window as any).Tesseract;
+  };
+
+  const readFollowupScreenshots = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files).filter((file) => file.type.startsWith("image/")).slice(0, 10);
+    if (!selected.length) return setFollowupError("Pilih file gambar screenshot JPG, PNG, atau WEBP.");
+    followupFiles.forEach((item) => URL.revokeObjectURL(item.url));
+    setFollowupFiles(selected.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })));
+    setFollowupReading(true);
+    setFollowupError("");
+    setFollowupCopied(false);
+    try {
+      const Tesseract = await loadTesseract();
+      const texts: string[] = [];
+      for (let i = 0; i < selected.length; i += 1) {
+        setFollowupProgress(`MEMBACA GAMBAR ${i + 1} DARI ${selected.length}...`);
+        const result = await Tesseract.recognize(selected[i], "eng", {
+          logger: (message: any) => {
+            if (message.status === "recognizing text") setFollowupProgress(`MEMBACA GAMBAR ${i + 1}/${selected.length} · ${Math.round((message.progress || 0) * 100)}%`);
+          },
+        });
+        texts.push(String(result?.data?.text || ""));
+      }
+      const combined = texts.join("\n\n");
+      setFollowupOcrText(combined);
+      setFollowupEntries(parseFollowupBankText(combined));
+      setFollowupProgress("SELESAI DIBACA");
+    } catch (error) {
+      setFollowupError(error instanceof Error ? error.message : "Screenshot gagal dibaca.");
+    } finally {
+      setFollowupReading(false);
+    }
+  };
+
+  const updateFollowupEntry = (id: string, field: keyof Omit<FollowupBankEntry, "id">, value: string) => {
+    setFollowupEntries((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item));
+    setFollowupCopied(false);
+  };
+  const followupReportText = `Info : TOGELUP\nPerihal : Follow-up Rekening ( BANK ) Bermasalah\n\n${followupEntries.map((item) => `Nama Rekening : ${item.accountName}\nNomor Rekening : ${item.accountNumber} (${item.bank})\nSaldo : Rp. ${item.balance ? Number(item.balance).toLocaleString("id-ID") : ""}\nKeterangan : ${item.description}`).join("\n\n")}`;
+  const copyFollowupReport = async () => {
+    if (!followupEntries.length) return;
+    await navigator.clipboard.writeText(followupReportText);
+    setFollowupCopied(true);
   };
 
   const loadMonitor = async (shift = monitorShift) => {
@@ -1851,6 +1968,8 @@ export default function Home() {
                     ? "Susun catatan serah terima shift, revisi setiap nomor, lalu salin seluruh hasil."
                   : kind === "bankOff"
                     ? "Tempel informasi rekening dari ADM, cocokkan otomatis, dan kelola Data Bank Situs tersimpan."
+                  : kind === "followupBank"
+                    ? "Upload screenshot bank bermasalah, baca detail otomatis, lalu salin laporan siap kirim ke LINE."
                   : "Isi detail konten, lalu salin prompt siap pakai ke generator gambar pilihan Anda."}
               </p>
             </div>
@@ -1941,6 +2060,8 @@ export default function Home() {
                 ? "grid monitorGrid lexendContent"
                 : kind === "bankOff"
                   ? "grid bankOffGrid lexendContent"
+                : kind === "followupBank"
+                  ? "grid followupBankGrid lexendContent"
                 : kind === "resultTracker" || kind === "resultArchive"
                   ? "grid resultTrackerGrid lexendContent"
                 : kind === "handover"
@@ -1954,7 +2075,45 @@ export default function Home() {
                       : "grid lexendContent"
             }
           >
-            {kind === "bankOff" ? (
+            {kind === "followupBank" ? (
+              <section className="followupBankStudio">
+                <section className="panel followupBankHero">
+                  <div><span>SMART SCREENSHOT READER</span><h1>Followup Bank Bermasalah</h1><p>Upload screenshot dari ADM. Sistem mengambil bank, nama rekening, nomor rekening, saldo, dan keterangan secara otomatis.</p></div>
+                  <b>{followupEntries.length} REKENING TERBACA</b>
+                </section>
+                {followupError && <div className="bankOffError">{followupError}</div>}
+                <section className="followupBankColumns">
+                  <section className="panel followupUploadPanel">
+                    <div className="panelHead"><div><span>01</span><h2>Upload Screenshot</h2></div><b>MAKS. 10 GAMBAR</b></div>
+                    <div className="followupBody">
+                      <label className={followupReading ? "followupDropzone reading" : "followupDropzone"}>
+                        <input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={followupReading} onChange={(event) => readFollowupScreenshots(event.target.files)} />
+                        <i>▧</i><strong>{followupReading ? followupProgress : "KLIK / PILIH SCREENSHOT"}</strong><small>PNG, JPG, atau WEBP · bisa upload banyak sekaligus</small>
+                      </label>
+                      {!!followupFiles.length && <div className="followupThumbs">{followupFiles.map((file) => <figure key={file.url}><img src={file.url} alt={file.name} /><figcaption>{file.name}</figcaption></figure>)}</div>}
+                      {followupOcrText && <details className="followupRaw"><summary>LIHAT / PERBAIKI TEKS HASIL BACA</summary><textarea value={followupOcrText} onChange={(event) => setFollowupOcrText(event.target.value)} /><button onClick={() => setFollowupEntries(parseFollowupBankText(followupOcrText))}>BACA ULANG TEKS</button></details>}
+                    </div>
+                  </section>
+                  <section className="panel followupEditPanel">
+                    <div className="panelHead"><div><span>02</span><h2>Data yang Terdeteksi</h2></div><button onClick={() => setFollowupEntries((current) => [...current, { id: crypto.randomUUID(), bank: "BANK", accountName: "", accountNumber: "", balance: "", description: "" }])}>+ TAMBAH</button></div>
+                    <div className="followupBody followupEntryList">
+                      {followupEntries.length ? followupEntries.map((item, index) => <article className="followupEntry" key={item.id}>
+                        <header><b>REKENING {index + 1}</b><button onClick={() => setFollowupEntries((current) => current.filter((entry) => entry.id !== item.id))}>HAPUS</button></header>
+                        <label>BANK<input value={item.bank} onChange={(event) => updateFollowupEntry(item.id, "bank", event.target.value.toUpperCase())} /></label>
+                        <label>NAMA REKENING<input value={item.accountName} onChange={(event) => updateFollowupEntry(item.id, "accountName", event.target.value)} /></label>
+                        <label>NOMOR REKENING<input value={item.accountNumber} onChange={(event) => updateFollowupEntry(item.id, "accountNumber", event.target.value.replace(/\D/g, ""))} /></label>
+                        <label>SALDO (RP)<input inputMode="numeric" value={item.balance} onChange={(event) => updateFollowupEntry(item.id, "balance", event.target.value.replace(/\D/g, ""))} /></label>
+                        <label className="wide">KETERANGAN<textarea value={item.description} onChange={(event) => updateFollowupEntry(item.id, "description", event.target.value)} /></label>
+                      </article>) : <div className="bankOffEmpty">Upload screenshot untuk membaca data rekening secara otomatis.</div>}
+                    </div>
+                  </section>
+                  <section className="panel followupOutputPanel">
+                    <div className="panelHead"><div><span>03</span><h2>Report LINE</h2></div><b>SIAP KIRIM</b></div>
+                    <div className="followupBody"><pre className="followupReport">{followupEntries.length ? followupReportText : "Hasil report akan tampil setelah screenshot selesai dibaca."}</pre><button className="bankOffCopy" disabled={!followupEntries.length} onClick={copyFollowupReport}>{followupCopied ? "✓ REPORT TERSALIN" : "SALIN REPORT UNTUK LINE"}</button></div>
+                  </section>
+                </section>
+              </section>
+            ) : kind === "bankOff" ? (
               <section className="bankOffStudio">
                 <section className="panel bankOffHero">
                   <div>
@@ -3596,6 +3755,7 @@ export default function Home() {
           .shell.lightMode .bankOffNoMatch{color:#116e50;background:#e7fff5}
           .bankOffMaintenanceNote{display:flex;align-items:center;gap:10px;padding:13px 18px;border:1px solid rgba(238,203,77,.4);border-left:4px solid #ffe24f;border-radius:9px;color:#dce9e9;background:linear-gradient(90deg,rgba(255,224,58,.12),rgba(0,211,255,.045));font-size:10px;font-weight:800;line-height:1.55;box-shadow:0 8px 25px rgba(0,0,0,.16)}
           .bankOffMaintenanceNote strong{flex:0 0 auto;color:#ffe65e;font-size:11px;font-weight:950;letter-spacing:.04em}.shell.lightMode .bankOffMaintenanceNote{color:#344f54;background:linear-gradient(90deg,#fff8d8,#eef8f7)}
+          .followupBankGrid{display:block!important;max-width:1540px}.followupBankStudio{display:grid;gap:18px}.followupBankHero{display:flex;align-items:center;gap:20px;padding:25px 28px;border-color:rgba(255,180,70,.32)!important}.followupBankHero>div{margin-right:auto}.followupBankHero span{color:#ffbd61;font-size:9px;font-weight:950;letter-spacing:.16em}.followupBankHero h1{margin:7px 0 5px;font-size:31px}.followupBankHero p{max-width:820px;margin:0;color:#9eb4b9;font-size:11px;line-height:1.6}.followupBankHero>b{padding:13px 16px;border:1px solid rgba(255,180,70,.32);border-radius:9px;color:#ffd18b;background:#261a0b;font-size:9px}.followupBankColumns{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(420px,1.25fr) minmax(350px,1fr);gap:14px;align-items:start}.followupBankColumns>.panel{overflow:hidden}.followupBody{display:grid;gap:13px;padding:20px}.followupDropzone{display:grid;place-items:center;min-height:230px;padding:24px;border:2px dashed rgba(255,183,81,.48);border-radius:13px;cursor:pointer;text-align:center;background:linear-gradient(145deg,rgba(255,174,55,.08),rgba(45,178,195,.05))}.followupDropzone.reading{cursor:wait;animation:urgentNotePulse 1.4s infinite}.followupDropzone input{display:none}.followupDropzone i{font-style:normal;color:#ffc46d;font-size:45px}.followupDropzone strong{margin-top:10px;color:#f7e0b7;font-size:11px}.followupDropzone small{margin-top:7px;color:#879da3;font-size:8px}.followupThumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.followupThumbs figure{min-width:0;margin:0;padding:6px;border:1px solid rgba(98,167,177,.22);border-radius:8px;background:#09171c}.followupThumbs img{width:100%;height:90px;object-fit:cover;border-radius:5px}.followupThumbs figcaption{margin-top:5px;overflow:hidden;color:#91a7ad;font-size:7px;text-overflow:ellipsis;white-space:nowrap}.followupRaw summary{cursor:pointer;color:#8fdce5;font-size:8px;font-weight:900}.followupRaw textarea{width:100%;min-height:170px;margin-top:9px;padding:11px;border:1px solid #34525a;border-radius:8px;color:#dce8e9;background:#071318;font:700 9px/1.55 "Lexend",sans-serif}.followupRaw button,.followupEditPanel .panelHead button{padding:8px 10px;border:1px solid #48747c;border-radius:7px;color:#bdebf0;background:#153038;font-size:7px;font-weight:900}.followupEntryList{max-height:720px;overflow:auto}.followupEntry{display:grid;grid-template-columns:.55fr 1.45fr;gap:10px;padding:13px;border:1px solid rgba(255,187,86,.25);border-radius:10px;background:#0b191e}.followupEntry header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.followupEntry header b{color:#ffca77;font-size:9px}.followupEntry header button{border:0;color:#ff8d9d;background:transparent;font-size:7px;font-weight:900}.followupEntry label{display:grid;gap:5px;color:#849da3;font-size:7px;font-weight:900}.followupEntry label.wide{grid-column:1/-1}.followupEntry input,.followupEntry textarea{min-width:0;padding:10px;border:1px solid rgba(91,164,176,.25);border-radius:7px;color:#ecf4f4;background:#071318;font:750 9px "Lexend",sans-serif}.followupEntry textarea{min-height:65px;resize:vertical}.followupReport{min-height:520px;margin:0;padding:17px;border:1px solid rgba(255,190,87,.3);border-radius:10px;overflow:auto;white-space:pre-wrap;color:#f0e7d5;background:#0b130f;font:750 10px/1.75 "Lexend",sans-serif}.followupOutputPanel{position:sticky;top:10px}.shell.lightMode .followupBankHero>b{color:#7a4b08;background:#fff3da}.shell.lightMode .followupDropzone,.shell.lightMode .followupEntry,.shell.lightMode .followupRaw textarea,.shell.lightMode .followupEntry input,.shell.lightMode .followupEntry textarea,.shell.lightMode .followupReport{color:#29464b;background:#fff}.shell.lightMode .followupDropzone strong{color:#76501b}@media(max-width:1250px){.followupBankColumns{grid-template-columns:1fr 1fr}.followupOutputPanel{position:static;grid-column:1/-1}.followupReport{min-height:360px}}@media(max-width:760px){.followupBankColumns{grid-template-columns:1fr}.followupOutputPanel{grid-column:auto}.followupEntry{grid-template-columns:1fr}.followupEntry label.wide,.followupEntry header{grid-column:auto}}
           @media(max-width:1200px){.resultMarketCards{grid-template-columns:repeat(2,minmax(0,1fr))}.resultMarketForm{grid-template-columns:repeat(3,1fr)}}
           @media(max-width:1050px){.handoverStudio{grid-template-columns:1fr}.handoverOutputPanel{position:static}.handoverOutput{min-height:400px}.handoverOutput pre{min-height:400px}.resultTrackerHero{align-items:flex-start;flex-wrap:wrap}}
           @media(max-width:620px){.ssPreviewBackdrop{padding:7px}.ssPreviewModal{width:100%;height:96vh}.ssPreviewHead{flex-wrap:wrap}.ssPreviewHead div{width:100%}.ssThumbnailButton img{height:150px}.handoverBody{padding:14px}.handoverShiftTabs{grid-template-columns:1fr}.handoverOutput{margin:14px 14px 0}.handoverOutputPanel>.handoverCopy,.handoverOutputPanel>.quality{width:calc(100% - 28px);margin-left:14px;margin-right:14px}.resultTrackerHero{padding:18px}.resultLiveClock{width:100%}.resultMarketCards,.resultMarketForm,.resultPrizeInputs{grid-template-columns:1fr}.resultMarketList>div{grid-template-columns:1fr 1fr}.resultMarketList small{grid-column:1/-1}}

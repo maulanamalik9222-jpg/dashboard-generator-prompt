@@ -13,7 +13,7 @@ const json = (data: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(data, { status, headers });
 
 const emailValid = (email: string) => /^\S+@\S+\.\S+$/.test(email);
-const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor","handover","resultTracker","resultArchive","bankOff"] as const;
+const MENU_IDS = ["kemenangan","syair","prediksi","jadwal","validasi","usdt","result","bola","monitor","handover","resultTracker","resultArchive","bankOff","followupBank"] as const;
 let menuTableReady: Promise<unknown> | null = null;
 let staffRoleTableReady: Promise<unknown> | null = null;
 let approvalTableReady: Promise<unknown> | null = null;
