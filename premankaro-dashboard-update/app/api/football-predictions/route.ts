@@ -4,7 +4,7 @@ type Match = { time: string; date: string; home: string; away: string; score: st
 type League = { name: string; matches: Match[] };
 
 const MONTHS = ["januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"];
-const FIXED_SOURCE = "https://jpkoloni4d.pagesco.de/prediksi-bola-10-11-agustus-2026";
+const FIXED_SOURCE = "https://bolapelangi2.jadwalbola.org/prediksi-bola-15-16-september-2026";
 
 function jakartaDate(offset = 0) {
   const now = new Date(Date.now() + offset * 86_400_000);
@@ -17,7 +17,7 @@ function dailySources() {
   const today = jakartaDate();
   const tomorrow = jakartaDate(1);
   const yesterday = jakartaDate(-1);
-  const make = (a: typeof today, b: typeof today) => `https://jpkoloni4d.pagesco.de/prediksi-bola-${a.day}-${b.day}-${MONTHS[b.month - 1]}-${b.year}`;
+  const make = (a: typeof today, b: typeof today) => `https://bolapelangi2.jadwalbola.org/prediksi-bola-${a.day}-${b.day}-${MONTHS[b.month - 1]}-${b.year}`;
   return Array.from(new Set([make(today, tomorrow), make(yesterday, today), FIXED_SOURCE]));
 }
 
